@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Creater</title>
+    <link rel="stylesheet" href="style.css?v=arc-group-1">
+</head>
+<body>
+    <header class="page-header">
+        <h1>Graph Creater</h1>
+    </header>
+
+    <main class="workspace">
+        <section class="panel node-panel" aria-labelledby="node-title">
+            <header class="panel-header">
+                <h2 id="node-title">Nodes</h2>
+                <span id="node-count"></span>
+            </header>
+            <div class="node-toolbar">
+                <span class="toolbar-kind geometry-label">Geometry</span>
+                <button id="add-circle" type="button">＋ Circle</button>
+                <span class="toolbar-kind function-label">Functions</span>
+                <button id="add-tangent" type="button">+ Self tangent</button>
+                <button id="add-gap-tangent" type="button">+ Gap circles</button>
+                <button id="add-three-tangent" type="button">＋ create circle by 3 parameter</button>
+                <button id="add-arc" type="button">+ Create arc</button>
+            </div>
+            <p class="editor-help"><span class="geometry-label">Geometry</span> → <span class="function-label">Function</span> → <span class="geometry-label">Geometry</span> · Functions take geometry inputs and produce new geometry.</p>
+            <div class="graph-toolbar" aria-label="Graph layout controls">
+                <button id="arrange-nodes" type="button">Auto arrange</button>
+                <button id="fit-graph" type="button">Fit graph</button>
+                <button id="graph-zoom-out" type="button" aria-label="Zoom out graph">−</button>
+                <span id="graph-zoom-label">100%</span>
+                <button id="graph-zoom-in" type="button" aria-label="Zoom in graph">+</button>
+                <span id="graph-layout-status" role="status">Use Auto arrange for routed connections</span>
+            </div>
+            <div id="node-viewport" tabindex="0" aria-label="Scrollable node list">
+                <div id="graph-space"><div id="card-layout">
+                    <svg id="card-links" aria-hidden="true"></svg>
+                    <div id="node-cards"></div>
+                </div></div>
+            </div>
+            <p id="editor-message" role="status" aria-live="polite">Geometry updates automatically when parameters change.</p>
+        </section>
+
+        <section class="panel drawing-panel" aria-labelledby="drawing-title">
+            <header class="panel-header">
+                <h2 id="drawing-title">Result</h2>
+                <span id="geometry-count"></span>
+                <button id="fit-view" type="button">Fit view</button>
+            </header>
+            <div class="arc-toolbar" aria-label="Arc display settings">
+                <button id="edit-arcs" type="button" aria-pressed="false">Edit arcs</button>
+                <label><input id="show-hidden-arcs" type="checkbox"> Show hidden arcs</label>
+                <button id="undo-arc" type="button" disabled>Undo</button>
+                <button id="restore-arcs" type="button" disabled>Restore all to solid</button>
+                <span id="arc-style-count" role="status"></span>
+                <p id="arc-edit-help"></p><p id="arc-change-notice" role="status"></p>
+            </div>
+            <section id="tangent-tool" hidden aria-label="create circle by 3 parameter settings">
+                <div class="tangent-tool-heading"><strong id="tangent-tool-title">create circle by 3 parameter</strong><button id="close-tangent-tool" type="button">Done</button></div>
+                <p class="tangent-help">Choose A, B and C from the canvas or menus. Internal tangency places the new circle inside that boundary. Click a dashed candidate to confirm.</p>
+                <div id="tangent-boundaries"></div>
+                <details class="tangent-advanced"><summary>Containment and collision checks</summary>
+                <div class="container-row"><label for="tangent-container">Containing circle (optional)</label><select id="tangent-container"></select></div>
+                <div class="tangent-actions"><button id="refresh-obstacles" type="button">Refresh collision sources</button><span id="obstacle-count"></span></div>
+                <p class="tangent-help">Collision checks include existing circles, even hidden ones. Refresh after adding geometry. Circles enclosing all three boundaries are treated as containers.</p>
+                </details>
+                <div id="tangent-candidates"></div><p id="tangent-tool-status" role="status"></p>
+            </section>
+            <div class="drawing-area">
+                <svg id="drawing-board"
+                     xmlns="http://www.w3.org/2000/svg"
+                     viewBox="-200 -200 400 400"
+                     role="img"
+                     aria-label="Geometry canvas">
+                </svg>
+            </div>
+        </section>
+    </main>
+    <script src="point.js?v=arc-group-1"></script>
+    <script src="node-axis.js?v=arc-group-1"></script>
+    <script src="node-circle.js?v=arc-group-1"></script>
+    <script src="self-tangent-circles.js?v=arc-group-1"></script>
+    <script src="renderer.js?v=arc-group-1"></script>
+    <script src="gap-tangent-circles.js?v=arc-group-1"></script>
+    <script src="three-tangent-circle.js?v=arc-group-1"></script>
+    <script src="constructed-arc.js?v=arc-group-1"></script>
+    <script src="arc-group.js?v=arc-group-1"></script>
+    <script src="graph-model.js?v=arc-group-1"></script>
+    <script src="arc-node-editor.js?v=arc-group-1"></script>
+    <script src="vendor/elkjs/elk.bundled.js?v=0.12.0"></script>
+    <script src="graph-layout.js?v=arc-group-1"></script>
+    <script src="node-editor.js?v=arc-group-1"></script>
+    <script src="arc-geometry.js?v=arc-group-1"></script>
+    <script src="arc-styles.js?v=arc-group-1"></script>
+    <script src="graph-preview.js?v=arc-group-1"></script>
+    <script src="tangent-tool.js?v=arc-group-1"></script>
+    <script src="app.js?v=arc-group-1"></script>
+</body>
+</html>
