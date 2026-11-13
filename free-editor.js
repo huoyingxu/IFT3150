@@ -97,20 +97,35 @@ function buildFreeSegments(curves, centers = []) {
 function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
+    const connections=[];
+    let pendingConnection=null;
     let selected=[],choices=[],choice=0;
-    function reset() { selected=[];choices=[];choice=0; }
+    function reset() { pendingConnection=null; selected=[];choices=[];choice=0; }
     const api={
         active:false,
-        hasEdits:()=>styles.size>0,
+        hasEdits:()=>styles.size>0 || connections.length>0,
         close(){api.active=false;reset();},
         render(curves,board,svg,centers){
             el('free-panel').hidden=!api.active;
             el('create-editor').setAttribute('aria-pressed',String(api.active));
             el('create-editor').textContent=api.active?'Exit editor':'Create editor';
-            if (!api.active && !styles.size) return;
+            if (!api.active && !api.hasEdits()) return;
+            for (const {a,b} of connections) {
+                const element=svg('line',{x1:a.x,y1:-a.y,x2:b.x,y2:-b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
+                board.append(element);
+                curves.push({a,b,element});
+            }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
             if (selected.some(id=>!points.has(id))) reset();
             choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
+            pendingConnection=null;
+            if (selected.length===2) {
+                const [a,b]=selected.map(id=>points.get(id));
+                const epsilon=freeDistance(a,b)*1e-8;
+                const connected=curves.some(curve=>curve.a && freeParameter(curve,a,epsilon)!==null && freeParameter(curve,b,epsilon)!==null);
+                if (!connected) pendingConnection={a,b};
+            }
+            el('free-connect').disabled=!pendingConnection;
             choice=choice<choices.length?choice:0;
             const byCurve=new Map();
             for(const piece of pieces) {
@@ -144,7 +159,7 @@ function createFreeEditor(state,update,repaint) {
                 dot.onkeydown=e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();select();}};
                 board.append(dot);
             }
-            el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select the other end of an adjacent segment.':!chosen?'No single segment joins these points. Select two neighboring points.':choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
+            el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
             el('free-next').hidden=choices.length<2;
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
             el('free-clear').disabled=!selected.length;
@@ -153,10 +168,17 @@ function createFreeEditor(state,update,repaint) {
     };
     el('create-editor').onclick=()=>{api.active=!api.active;reset();state.arcEditing=false;state.tangentToolId=null;update();};
     el('free-clear').onclick=()=>{reset();repaint();};
+    el('free-connect').onclick=()=>{
+        if (!api.active || !pendingConnection) return;
+        connections.push(pendingConnection);
+        history.push({connection:pendingConnection});
+        reset();
+        repaint();
+    };
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
     for(const [button,style] of [['free-dash','dashed'],['free-hide','hidden'],['free-solid','solid']]) {
-        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push([id,styles.get(id)]);styles.set(id,style);reset();repaint();};
+        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);reset();repaint();};
     }
-    el('free-undo').onclick=()=>{const edit=history.pop();if(!edit)return;const [id,previous]=edit;if(previous)styles.set(id,previous);else styles.delete(id);reset();repaint();};
+    el('free-undo').onclick=()=>{const edit=history.pop();if(!edit)return;if(edit.connection) connections.pop();else if(edit.previous)styles.set(edit.id,edit.previous);else styles.delete(edit.id);reset();repaint();};
     return api;
 }
