@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const context=vm.createContext({});
+for(const file of ['arc-geometry.js','free-editor.js']) vm.runInContext(fs.readFileSync(file,'utf8'),context);
+const line=(x,y,X,Y)=>({a:{x,y},b:{x:X,y:Y}});
+const horizontal=line(-2,0,2,0), vertical=line(0,-2,0,2);
+const circle={center:{x:0,y:0},radius:1,start:0,end:2*Math.PI};
+const graph=context.buildFreeSegments([horizontal,vertical,circle]);
+assert.equal(graph.points.size,9);
+assert.equal(graph.pieces.length,12);
+assert.equal(context.buildFreeSegments([line(2,-2,2,2),horizontal]).pieces.length,3);
+const half={...circle,end:Math.PI};
+assert.equal(context.buildFreeSegments([vertical,half]).pieces.length,4);
+const reversed=line(2,0,-2,0);
+const double=context.buildFreeSegments([horizontal,reversed,vertical]);
+assert.equal(new Set(double.pieces.map(p=>p.id)).size,4);
+const two=context.buildFreeSegments([circle,horizontal]);
+const arcs=two.pieces.filter(p=>p.curve===circle);
+assert.equal(arcs.length,2);
+assert.notEqual(arcs[0].id,arcs[1].id);
+console.log('Passed editor intersections, bounded arcs, shared endpoints and alternate paths.');
+
+const controls=new Map();
+const document={getElementById(id){if(!controls.has(id)) controls.set(id,element());return controls.get(id);}};
+function element(attrs={}) {return {attrs,style:{},children:[],setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k]??null;},before(item){this.children.push(item);},remove(){this.removed=true;},append(item){this.children.push(item);}};}
+context.document=document;
+const board=element();
+board.getScreenCTM=()=>({a:1});
+let editor,curves;
+const paint=()=>{
+    board.children=[];
+    curves=[horizontal,vertical].map(c=>({...c,element:element({stroke:'white'})}));
+    editor.render(curves,board,(_,attrs)=>element(attrs));
+};
+editor=context.createFreeEditor({},paint,paint);
+const click=id=>document.getElementById(id).onclick();
+const point=(x,y)=>board.children.find(e=>e.attrs.cx===x && e.attrs.cy===-y).onclick();
+click('create-editor');
+point(-2,0);point(0,0);click('free-dash');
+assert.ok(curves[0].element.children.some(e=>e.attrs['stroke-dasharray']==='6 4'));
+point(-2,0);point(0,0);click('free-hide');
+assert.equal(curves[0].element.children.length,1);
+click('create-editor');
+assert.equal(curves[0].element.children.length,1);
+click('create-editor');click('free-undo');
+assert.ok(curves[0].element.children.some(e=>e.attrs['stroke-dasharray']==='6 4'));
+console.log('Passed endpoint selection, dash, hide, exit and undo.');

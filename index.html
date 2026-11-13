@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graph Creater</title>
-    <link rel="stylesheet" href="style.css?v=arc-group-1">
+    <link rel="stylesheet" href="style.css?v=free-editor-1">
 </head>
 <body>
     <header class="page-header">
@@ -51,12 +51,22 @@
                 <button id="fit-view" type="button">Fit view</button>
             </header>
             <div class="arc-toolbar" aria-label="Arc display settings">
+                <button id="create-editor" type="button" aria-pressed="false">Create editor</button>
                 <button id="edit-arcs" type="button" aria-pressed="false">Edit arcs</button>
                 <label><input id="show-hidden-arcs" type="checkbox"> Show hidden arcs</label>
                 <button id="undo-arc" type="button" disabled>Undo</button>
                 <button id="restore-arcs" type="button" disabled>Restore all to solid</button>
                 <span id="arc-style-count" role="status"></span>
                 <p id="arc-edit-help"></p><p id="arc-change-notice" role="status"></p>
+            </div>
+            <div id="free-panel" class="arc-toolbar" hidden>
+                <span id="free-help" role="status"></span>
+                <button id="free-next" type="button" hidden>Next segment</button>
+                <button id="free-dash" type="button">Dashed</button>
+                <button id="free-hide" type="button">Hide</button>
+                <button id="free-solid" type="button">Solid</button>
+                <button id="free-clear" type="button">Clear selection</button>
+                <button id="free-undo" type="button">Undo segment edit</button>
             </div>
             <section id="tangent-tool" hidden aria-label="create circle by 3 parameter settings">
                 <div class="tangent-tool-heading"><strong id="tangent-tool-title">create circle by 3 parameter</strong><button id="close-tangent-tool" type="button">Done</button></div>
@@ -79,24 +89,26 @@
             </div>
         </section>
     </main>
-    <script src="point.js?v=arc-group-1"></script>
-    <script src="node-axis.js?v=arc-group-1"></script>
-    <script src="node-circle.js?v=arc-group-1"></script>
-    <script src="self-tangent-circles.js?v=arc-group-1"></script>
-    <script src="renderer.js?v=arc-group-1"></script>
-    <script src="gap-tangent-circles.js?v=arc-group-1"></script>
-    <script src="three-tangent-circle.js?v=arc-group-1"></script>
-    <script src="constructed-arc.js?v=arc-group-1"></script>
-    <script src="arc-group.js?v=arc-group-1"></script>
-    <script src="graph-model.js?v=arc-group-1"></script>
-    <script src="arc-node-editor.js?v=arc-group-1"></script>
+    <script src="point.js?v=free-editor-1"></script>
+    <script src="node-axis.js?v=free-editor-1"></script>
+    <script src="node-circle.js?v=free-editor-1"></script>
+    <script src="self-tangent-circles.js?v=free-editor-1"></script>
+    <script src="renderer.js?v=free-editor-1"></script>
+    <script src="gap-tangent-circles.js?v=free-editor-1"></script>
+    <script src="three-tangent-circle.js?v=free-editor-1"></script>
+    <script src="constructed-arc.js?v=free-editor-1"></script>
+    <script src="arc-group.js?v=free-editor-1"></script>
+    <script src="graph-model.js?v=free-editor-1"></script>
+    <script src="arc-node-editor.js?v=free-editor-1"></script>
     <script src="vendor/elkjs/elk.bundled.js?v=0.12.0"></script>
-    <script src="graph-layout.js?v=arc-group-1"></script>
-    <script src="node-editor.js?v=arc-group-1"></script>
-    <script src="arc-geometry.js?v=arc-group-1"></script>
-    <script src="arc-styles.js?v=arc-group-1"></script>
-    <script src="graph-preview.js?v=arc-group-1"></script>
-    <script src="tangent-tool.js?v=arc-group-1"></script>
-    <script src="app.js?v=arc-group-1"></script>
+    <script src="graph-layout.js?v=free-editor-1"></script>
+    <script src="node-editor.js?v=free-editor-1"></script>
+    <script src="arc-geometry.js?v=free-editor-1"></script>
+    <script src="arc-styles.js?v=free-editor-1"></script>
+    <script src="free-editor.js?v=1"></script>
+    <script src="graph-preview.js?v=free-editor-1"></script>
+    <script src="tangent-tool.js?v=free-editor-1"></script>
+    <script src="app.js?v=free-editor-1"></script>
 </body>
 </html>
+

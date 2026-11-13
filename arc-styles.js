@@ -50,6 +50,7 @@ function createArcControls(state, onChange, repaint) {
     board.addEventListener('click',activate);
     board.addEventListener('keydown',activate);
     button.onclick = () => {
+        state.freeEditor?.close();
         state.arcEditing = !state.arcEditing;
         if (state.arcEditing) state.tangentToolId = null;
         onChange();

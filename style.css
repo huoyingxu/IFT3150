@@ -205,3 +205,6 @@ input[type="checkbox"] { accent-color: #a9d998; }
 #arrange-nodes:disabled { opacity:.5; cursor:wait; }
 #graph-space { position:relative; }
 #card-layout { position:absolute; left:0; top:0; transform-origin:0 0; }
+
+#free-panel[hidden], #free-next[hidden] { display: none; }
+#create-editor[aria-pressed="true"] {border-color: #93e7cd; color: #93e7cd;}

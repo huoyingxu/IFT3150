@@ -20,6 +20,19 @@ function createGraphPreview(state) {
             Object.entries(attributes).forEach(([key,value])=>element.setAttribute(key,value));
             return element;
         };
+        const editorCurves = [];
+        const collectEditor = state.freeEditor?.active || state.freeEditor?.hasEdits();
+        function registerArc(element, key, circle, interval) {
+            if (collectEditor) editorCurves.push({element, key, center:circle.center, radius:circle.radius, start:interval.start, end:interval.end});
+        }
+        function registerLines(group, key) {
+            if (!collectEditor) return;
+            group.querySelectorAll('line').forEach((element,index)=>{
+                const coord = name => Number(element.getAttribute(name));
+                editorCurves.push({element,key:key+'/line/'+index,
+                    a:{x:coord('x1'),y:-coord('y1')},b:{x:coord('x2'),y:-coord('y2')}});
+            });
+        }
         let count = 0;
         for (const entry of entries) {
             const alias = entry.aliases.find(a=>a.node.visible);
@@ -41,6 +54,7 @@ function createGraphPreview(state) {
                     opacity:hidden ? .35 : 1,'vector-effect':'non-scaling-stroke',class:'arc-stroke',
                     'pointer-events':'none','data-arc-style':style});
                 piece.append(stroke);
+                if (!hidden) registerArc(stroke,arc.key,circle,arc);
                 if (state.arcEditing && !state.tangentToolId) {
                     const action = style === 'solid' ? 'Click to make dashed' : style === 'dashed' ? 'Click to hide' : 'Click to restore solid';
                     const label = name+' / Arc '+(arcIndex+1)+' · '+action;
@@ -53,7 +67,10 @@ function createGraphPreview(state) {
                 }
                 group.append(piece);
             });
-            if (entry.aliases.some(a=>a.node.visible && a.node.showAxis)) drawNodeAxis(circle.axis,circle.radius,group);
+            if (entry.aliases.some(a=>a.node.visible && a.node.showAxis)) {
+                drawNodeAxis(circle.axis,circle.radius,group);
+                registerLines(group,entry.key);
+            }
             // Construction mode can still select a circle even when some of its
             // arcs are hidden. It never changes the saved display styles.
             if (state.tangentToolId && node.id !== state.tangentToolId) {
@@ -84,6 +101,7 @@ function createGraphPreview(state) {
                     if(label!=='O') guide.append(svg('line',{x1:arc.center.x,y1:-arc.center.y,x2:p.x,y2:-p.y,
                         stroke:'#8b9290','stroke-width':1,'stroke-dasharray':'3 6','vector-effect':'non-scaling-stroke'}));
                 }
+                registerLines(guide,key);
                 group.append(guide);
             }
             if(!hidden || state.showHiddenArcs) {
@@ -93,6 +111,7 @@ function createGraphPreview(state) {
                     'stroke-width':hidden?1.5:2.5,'stroke-dasharray':hidden?'2 6':style==='dashed'?'7 5':'none',
                     opacity:hidden?.35:1,'vector-effect':'non-scaling-stroke',class:'arc-stroke',
                     'pointer-events':'none','data-arc-style':style}));
+                if (!hidden) registerArc(piece.firstChild,key,arc,arc);
                 if(state.arcEditing && !state.tangentToolId) {
                     const action=style==='solid'?'Click to make dashed':style==='dashed'?'Click to hide':'Click to restore solid';
                     const hit=svg('path',{d:path,fill:'none',stroke:'transparent','stroke-width':10,
@@ -104,6 +123,7 @@ function createGraphPreview(state) {
             }
             board.append(group);
         }
+        state.freeEditor?.render(editorCurves,board,svg);
         document.getElementById('geometry-count').textContent = count + (count === 1 ? ' visible circle' : ' visible circles')
             +(constructed.length?' · '+arcCount+(arcCount===1?' arc':' arcs'):'');
         board.classList.toggle('editing-arcs',Boolean(state.arcEditing));
