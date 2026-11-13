@@ -51,7 +51,7 @@ function freeContacts(first,second,epsilon) {
     return circleArcContacts(first,second).map(({angle})=>({x:first.center.x+first.radius*Math.cos(angle),y:first.center.y+first.radius*Math.sin(angle)}));
 }
 
-function buildFreeSegments(curves) {
+function buildFreeSegments(curves, centers = []) {
     const size=curves.reduce((n,c)=>Math.max(n,c.a?freeDistance(c.a,c.b):c.radius),1);
     const epsilon=size*1e-8;
     const key=p=>[p.x,p.y].map(x=>Math.round(x/epsilon)).join(',');
@@ -64,6 +64,17 @@ function buildFreeSegments(curves) {
             if (a===null || b===null) continue;
             cuts[i].push({t:a,p});cuts[j].push({t:b,p});
         }
+    }
+    const centerIds = new Set();
+    for (const center of centers) {
+        const id = key(center);
+        if (centerIds.has(id)) continue;
+        centerIds.add(id);
+        points.set(id, center);
+        curves.forEach((curve, index) => {
+            const t = freeParameter(curve, center, epsilon);
+            if (t !== null) cuts[index].push({t, p:center});
+        });
     }
     curves.forEach((curve,i)=>{
         const ordered=cuts[i].sort((a,b)=>a.t-b.t);
@@ -80,7 +91,7 @@ function buildFreeSegments(curves) {
             pieces.push({id,ends,path,curve});
         }
     });
-    return {points,pieces};
+    return {points,pieces,centerIds};
 }
 
 function createFreeEditor(state,update,repaint) {
@@ -92,12 +103,12 @@ function createFreeEditor(state,update,repaint) {
         active:false,
         hasEdits:()=>styles.size>0,
         close(){api.active=false;reset();},
-        render(curves,board,svg){
+        render(curves,board,svg,centers){
             el('free-panel').hidden=!api.active;
             el('create-editor').setAttribute('aria-pressed',String(api.active));
             el('create-editor').textContent=api.active?'Exit editor':'Create editor';
             if (!api.active && !styles.size) return;
-            const {points,pieces}=buildFreeSegments(curves);
+            const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
             if (selected.some(id=>!points.has(id))) reset();
             choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
             choice=choice<choices.length?choice:0;
@@ -126,14 +137,14 @@ function createFreeEditor(state,update,repaint) {
             if(chosen) board.append(svg('path',{d:chosen.path,fill:'none',stroke:'#ffce78','stroke-width':5,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
             const scale=board.getScreenCTM()?.a || 1;
             for(const [id,p] of points) {
-                const dot=svg('circle',{cx:p.x,cy:-p.y,r:5/scale,fill:selected.includes(id)?'#ffce78':'#93e7cd',stroke:'#203933','stroke-width':1.4,'vector-effect':'non-scaling-stroke',tabindex:0,role:'button','aria-label':`Select point (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`});
+                const dot=svg('circle',{cx:p.x,cy:-p.y,r:5/scale,fill:selected.includes(id)?'#ffce78':centerIds.has(id)?'#77baff':'#93e7cd',stroke:'#203933','stroke-width':1.4,'vector-effect':'non-scaling-stroke',tabindex:0,role:'button','aria-label':`Select ${centerIds.has(id) ? 'circle center' : 'point'} (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`});
                 dot.style.cursor='pointer';
                 const select=()=>{if(selected.includes(id))selected=selected.filter(k=>k!==id);else {if(selected.length===2)reset();selected.push(id);}choice=0;repaint();};
                 dot.onclick=select;
                 dot.onkeydown=e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();select();}};
                 board.append(dot);
             }
-            el('free-help').textContent=!selected.length?'Select a point on the canvas. Enable Show axes to include straight lines.':selected.length===1?'Select the other end of an adjacent segment.':!chosen?'No single segment joins these points. Select two neighboring points.':choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
+            el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select the other end of an adjacent segment.':!chosen?'No single segment joins these points. Select two neighboring points.':choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
             el('free-next').hidden=choices.length<2;
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
             el('free-clear').disabled=!selected.length;

@@ -123,7 +123,10 @@ function createGraphPreview(state) {
             }
             board.append(group);
         }
-        state.freeEditor?.render(editorCurves,board,svg);
+        const centers = collectEditor
+            ? entries.filter(entry => entry.aliases.some(alias => alias.node.visible)).map(entry => entry.circle.center)
+            : [];
+        state.freeEditor?.render(editorCurves,board,svg,centers);
         document.getElementById('geometry-count').textContent = count + (count === 1 ? ' visible circle' : ' visible circles')
             +(constructed.length?' · '+arcCount+(arcCount===1?' arc':' arcs'):'');
         board.classList.toggle('editing-arcs',Boolean(state.arcEditing));

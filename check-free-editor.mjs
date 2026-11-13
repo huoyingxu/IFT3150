@@ -46,3 +46,8 @@ assert.equal(curves[0].element.children.length,1);
 click('create-editor');click('free-undo');
 assert.ok(curves[0].element.children.some(e=>e.attrs['stroke-dasharray']==='6 4'));
 console.log('Passed endpoint selection, dash, hide, exit and undo.');
+const centersTest=context.buildFreeSegments([horizontal],[{x:0,y:0},{x:1,y:1},{x:0,y:0}]);
+assert.equal(centersTest.centerIds.size,2);
+assert.equal(centersTest.points.size,4);
+assert.equal(centersTest.pieces.length,2);
+assert.equal(centersTest.pieces[0].ends[1],centersTest.pieces[1].ends[0]);
