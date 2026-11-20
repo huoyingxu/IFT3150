@@ -172,3 +172,41 @@ assert.ok(matching.every(piece=>{
     return d(piece.middle,parent.center)<d(piece.curve.center,parent.center);
 }));
 console.log('Passed screenshot configuration: 3 parent circles x 6 children; exactly 18 inward arcs or 6 local arcs, outer arcs preserved.');
+const addSources=context.freeSourceRegistry(groupState,groupedCurves);
+const parentCircle=groupState.evaluation.results.get(parents.id)[0];
+const smallCircles=groupState.evaluation.results.get(small.id);
+const endpoint=context.freeContacts(smallCircles[1],smallCircles[2],1e-7)[0];
+const prototypeLine={a:parentCircle.center,b:endpoint};
+prototypeLine.aRef=context.captureFreePoint(prototypeLine.a,addSources);
+prototypeLine.bRef=context.captureFreePoint(prototypeLine.b,addSources);
+const addCenters=groupState.nodes.flatMap(node=>groupState.evaluation.results.get(node.id).map(c=>c.center));
+const addPoints=context.buildFreeSegments(groupedCurves,addCenters).points;
+const allCopies=context.similarFreeConnections(prototypeLine,groupState,addSources,addPoints,[prototypeLine],'groups');
+assert.equal(allCopies.length,17);
+assert.equal(context.similarFreeConnections(prototypeLine,groupState,addSources,addPoints,[prototypeLine],'local').length,5);
+assert.equal(context.similarFreeConnections(prototypeLine,groupState,addSources,addPoints,[prototypeLine,...allCopies],'groups').length,0);
+assert.ok(allCopies.every(line=>line.aRef.kind!=='fixed' && line.bRef.kind!=='fixed'));
+
+// Normal UI entry: create one radius, add 17, undo the batch, then undo the prototype.
+let addedCurves;
+const additionPaint=()=>{
+    board.children=[];
+    addedCurves=groupedCurves.map(c=>({...c,element:element({stroke:'pink'})}));
+    editor.render(addedCurves,board,(_,attrs)=>element(attrs),addCenters);
+};
+editor=context.createFreeEditor(groupState,additionPaint,additionPaint);
+click('create-editor');
+point(prototypeLine.a.x,prototypeLine.a.y);
+const endDot=board.children.find(e=>typeof e.attrs.cx==='number' && Math.hypot(e.attrs.cx-endpoint.x,-e.attrs.cy-endpoint.y)<1e-6);
+endDot.onclick();
+click('free-connect');
+assert.equal(addedCurves.filter(c=>c.a).length,1);
+assert.match(document.getElementById('free-add-similar').textContent,/\(17\)/);
+click('free-add-similar');
+assert.equal(addedCurves.filter(c=>c.a).length,18);
+assert.equal(document.getElementById('free-add-similar').disabled,true);
+click('free-undo');
+assert.equal(addedCurves.filter(c=>c.a).length,1);
+click('free-undo');
+assert.equal(addedCurves.filter(c=>c.a).length,0);
+console.log('Passed similar connection creation, 17 all-group / 5 local copies, duplicate prevention, live endpoint references and batch undo.');

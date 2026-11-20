@@ -200,10 +200,53 @@ function findGroupedFreeSegments(reference,pieces,state,scope) {
     return findSimilarFreeSegments(reference,candidates,parent.center,piece=>freeParentCircle(piece,state).center);
 }
 
+function similarFreeConnections(connection,state,sources,points,curves,scope) {
+    if(!connection || !state.nodes) return [];
+    const a=resolveFreePoint(connection.aRef,sources),b=resolveFreePoint(connection.bRef,sources);
+    if(!a || !b) return [];
+    const circles=state.nodes.flatMap(node=>(state.evaluation.results.get(node.id)||[])
+        .filter(circle=>circle.type==='circle').map(circle=>({node,circle})));
+    // The smallest containing circle is the local construction frame.
+    const enclosing=circles.filter(({circle})=>[a,b].every(point=>
+        freeDistance(point,circle.center)<=circle.radius*(1+1e-7)));
+    enclosing.sort((x,y)=>x.circle.radius-y.circle.radius);
+    const source=scope==='global'?enclosing.at(-1):enclosing[0];
+    if(!source) return [];
+    const targets=scope==='groups'?circles.filter(entry=>entry.node.id===source.node.id):[source];
+    const candidates=[];
+    for(const {circle} of targets) {
+        const count=circle.axis?.nRosy || 1;
+        const epsilon=Math.max(1,circle.radius)*1e-6;
+        for(let i=0;i<count;i++) {
+            const angle=((circle.axis?.rotation || 0)-(source.circle.axis?.rotation || 0))*Math.PI/180+i*ARC_TAU/count;
+            const scale=circle.radius/source.circle.radius;
+            const transform=point=>{
+                const x=(point.x-source.circle.center.x)*scale,y=(point.y-source.circle.center.y)*scale;
+                return {x:circle.center.x+x*Math.cos(angle)-y*Math.sin(angle),
+                    y:circle.center.y+x*Math.sin(angle)+y*Math.cos(angle)};
+            };
+            const ends=[a,b].map(point=>{
+                const transformed=transform(point);
+                return [...points.values()].find(p=>freeDistance(p,transformed)<=epsilon);
+            });
+            if(ends.some(point=>!point) || freeDistance(...ends)<=epsilon) continue;
+            const [start,end]=ends;
+            const exists=[...curves,...candidates].some(curve=>curve.a &&
+                freeParameter(curve,start,epsilon)!==null && freeParameter(curve,end,epsilon)!==null);
+            if(exists) continue;
+            const aRef=captureFreePoint(start,sources),bRef=captureFreePoint(end,sources);
+            if(aRef.kind==='fixed' || bRef.kind==='fixed') continue;
+            candidates.push({a:start,b:end,aRef,bRef});
+        }
+    }
+    return candidates;
+}
+
 function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
     const connections=[];
+    let lastConnection=null, pendingSimilar=[];
     let nextConnectionId=1, geometrySignature=null, geometryNotice='';
     let pendingConnection=null;
     let lastHiddenId=null, similarPieces=[], previewSimilar=false;
@@ -223,7 +266,7 @@ function createFreeEditor(state,update,repaint) {
             if(geometrySignature!==null && signature!==geometrySignature) {
                 if(styles.size) geometryNotice='Geometry changed. Previous segment styles were cleared; reselect segments to style the updated geometry.';
                 styles.clear();
-                history.splice(0,history.length,...history.filter(edit=>edit.connection));
+                history.splice(0,history.length,...history.filter(edit=>edit.connection || edit.connections));
                 lastHiddenId=null;
                 reset();
             }
@@ -244,6 +287,11 @@ function createFreeEditor(state,update,repaint) {
                 sources.set(connection.key,curve);
             }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
+            pendingSimilar=similarFreeConnections(
+                connections.includes(lastConnection)?lastConnection:null,
+                state,sources,points,curves,el('free-scope').value || 'groups');
+            el('free-add-similar').disabled=!pendingSimilar.length;
+            el('free-add-similar').textContent=pendingSimilar.length?'Add similar segments ('+pendingSimilar.length+')':'Add similar segments';
             const reference=pieces.find(piece=>piece.id===lastHiddenId && styles.get(piece.id)==='hidden');
             similarPieces=[];
             if(reference) {
@@ -263,7 +311,7 @@ function createFreeEditor(state,update,repaint) {
             }
             const matches=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
             el('free-similar').disabled=!matches.length;
-            el('free-preview').disabled=!matches.length;
+            el('free-preview').disabled=!matches.length && !pendingSimilar.length;
             el('free-similar').textContent=matches.length ? 'Hide similar segments ('+matches.length+')' : 'Hide similar segments';
             if (selected.some(id=>!points.has(id))) reset();
             choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
@@ -298,6 +346,11 @@ function createFreeEditor(state,update,repaint) {
             }
             if (!api.active) return;
             if(previewSimilar) {
+                for(const {a,b} of pendingSimilar) {
+                    board.append(svg('path',{d:'M '+a.x+' '+(-a.y)+' L '+b.x+' '+(-b.y),
+                        fill:'none',stroke:'#77baff','stroke-width':3,'stroke-dasharray':'5 4',
+                        'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
+                }
                 for(const piece of similarPieces.filter(piece=>styles.get(piece.id)!=='hidden')) {
                     board.append(svg('path',{d:piece.path,fill:'none',stroke:'#ffd178','stroke-width':4,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
                 }
@@ -327,11 +380,20 @@ function createFreeEditor(state,update,repaint) {
     el('free-connect').onclick=()=>{
         if (!api.active || !pendingConnection) return;
         connections.push(pendingConnection);
+        lastConnection=pendingConnection;
         history.push({connection:pendingConnection});
         reset();
         repaint();
     };
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
+    el('free-add-similar').onclick=()=>{
+        if(!api.active || !pendingSimilar.length) return;
+        const added=pendingSimilar.map(connection=>({...connection,key:'connection/'+nextConnectionId++}));
+        connections.push(...added);
+        history.push({connections:added});
+        reset();
+        repaint();
+    };
     el('free-scope').onchange=()=>{previewSimilar=true;repaint();};
     el('free-preview').onclick=()=>{previewSimilar=!previewSimilar;repaint();};
     el('free-similar').onclick=()=>{
@@ -349,7 +411,8 @@ function createFreeEditor(state,update,repaint) {
     el('free-undo').onclick=()=>{
         const edit=history.pop();
         if(!edit) return;
-        if(edit.connection) connections.pop();
+        if(edit.connections) connections.splice(connections.length-edit.connections.length,edit.connections.length);
+        else if(edit.connection) connections.pop();
         else {
             for(const entry of edit.batch || [edit]) {
                 if(entry.previous) styles.set(entry.id,entry.previous);
