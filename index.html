@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graph Creater</title>
-    <link rel="stylesheet" href="style.css?v=free-editor-1">
+    <link rel="stylesheet" href="style.css?v=render-1">
 </head>
 <body>
     <header class="page-header">
@@ -48,6 +48,7 @@
             <header class="panel-header">
                 <h2 id="drawing-title">Result</h2>
                 <span id="geometry-count"></span>
+                <label class="render-toggle"><input id="render-image" type="checkbox"> Render</label>
                 <button id="fit-view" type="button">Fit view</button>
             </header>
             <div class="arc-toolbar" aria-label="Arc display settings">
@@ -89,6 +90,7 @@
                 <div id="tangent-candidates"></div><p id="tangent-tool-status" role="status"></p>
             </section>
             <div class="drawing-area">
+                <img id="rendered-image" hidden alt="Engraved rendering of the current geometry">
                 <svg id="drawing-board"
                      xmlns="http://www.w3.org/2000/svg"
                      viewBox="-200 -200 400 400"
@@ -115,9 +117,10 @@
     <script src="arc-geometry.js?v=free-editor-1"></script>
     <script src="arc-styles.js?v=free-editor-1"></script>
     <script src="free-editor.js?v=8"></script>
-    <script src="graph-preview.js?v=free-editor-2"></script>
+    <script src="graph-preview.js?v=render-1"></script>
     <script src="tangent-tool.js?v=free-editor-1"></script>
-    <script src="app.js?v=free-editor-1"></script>
+    <script src="rendered-preview.js?v=1"></script>
+    <script src="app.js?v=render-1"></script>
 </body>
 </html>
 

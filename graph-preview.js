@@ -140,6 +140,7 @@ function createGraphPreview(state) {
             : 'Enable Edit arcs to style segments between intersections and tangencies.';
         document.getElementById('arc-change-notice').textContent=removed
             ? 'Arc boundaries changed. Cleared '+removed+' display settings that no longer match.' : '';
+        state.renderImage?.update();
     }
 
     function fit() {

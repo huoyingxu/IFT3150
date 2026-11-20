@@ -208,3 +208,7 @@ input[type="checkbox"] { accent-color: #a9d998; }
 
 #free-panel[hidden], #free-next[hidden] { display: none; }
 #create-editor[aria-pressed="true"] {border-color: #93e7cd; color: #93e7cd;}
+.render-toggle { display:flex; align-items:center; gap:6px; font-size:13px; white-space:nowrap; }
+#rendered-image { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#e9d7b3; }
+#rendered-image[hidden] { display:none; }
+.rendered-mode #drawing-board { visibility:hidden; }

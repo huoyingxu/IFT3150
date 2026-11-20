@@ -36,6 +36,7 @@ state.generateArcGroup = sourceId => {
     editor.notify('Arc group created with 3 members, including the original. Source geometry hidden to avoid overlap; its construction remains active.');
 };
 state.freeEditor = createFreeEditor(state, updateGraph, () => preview.render());
+state.renderImage = createRenderedPreview(state, updateGraph);
 createArcControls(state,updateGraph,()=>{ preview.render(); tangentTool.refresh(); });
 
 function addNode(kind) {
