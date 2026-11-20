@@ -94,6 +94,66 @@ function buildFreeSegments(curves, centers = []) {
     return {points,pieces,centerIds};
 }
 
+// A registry identifies each source circle/arc by node and member ordinal.
+function freeSourceRegistry(state, curves) {
+    const sources=new Map();
+    for (const curve of curves) {
+        if (curve.key && curve.a) sources.set(curve.key.replace(/@\d+:/g, ':'),curve);
+    }
+    if(!state.nodes) curves.filter(curve=>!curve.a && curve.key).forEach(curve=>sources.set(curve.key,curve));
+    for (const node of state.nodes || []) {
+        (state.evaluation.results.get(node.id) || []).forEach((object,index)=>{
+            const start=object.type==='arc' ? object.start : (object.axis?.rotation || 0)*Math.PI/180;
+            sources.set(node.id+':'+index,{...object,start,
+                end:object.type==='arc' ? object.end : start+ARC_TAU});
+        });
+    }
+    return sources;
+}
+
+function captureFreePoint(point,sources) {
+    const scale=Math.max(1,...[...sources.values()].map(c=>c.radius || freeDistance(c.a,c.b)));
+    const epsilon=scale*1e-7;
+    for (const [key,curve] of sources) {
+        if (curve.center && freeDistance(point,curve.center)<=epsilon)
+            return {kind:'center',key};
+    }
+    // Full source circles avoid references to temporary split-arc boundaries.
+    const entries=[...sources].filter(([key])=>!key.includes('@') && !key.includes('>') && !key.includes('/full'));
+    const on=entries.filter(([,curve])=>freeParameter(curve,point,epsilon)!==null);
+    for (let i=0;i<on.length;i++) {
+        for (let j=i+1;j<on.length;j++) {
+            const [first,a]=on[i], [second,b]=on[j];
+            if(a.center && b.center && freeDistance(a.center,b.center)<=epsilon &&
+                Math.abs(a.radius-b.radius)<=epsilon) continue;
+            const contacts=freeContacts(a,b,epsilon).filter(p=>
+                freeParameter(a,p,epsilon)!==null && freeParameter(b,p,epsilon)!==null);
+            const branch=contacts.findIndex(p=>freeDistance(p,point)<=epsilon);
+            if(branch>=0) return {kind:'intersection',first,second,branch,count:contacts.length};
+        }
+    }
+    if(on.length) {
+        const [key,curve]=on[0];
+        return {kind:'parameter',key,t:freeParameter(curve,point,epsilon)};
+    }
+    return {kind:'fixed',point:{...point}};
+}
+
+function resolveFreePoint(reference,sources) {
+    if(reference.kind==='fixed') return reference.point;
+    if(reference.kind==='center') return sources.get(reference.key)?.center || null;
+    if(reference.kind==='parameter') {
+        const curve=sources.get(reference.key);
+        return curve ? freePoint(curve,reference.t) : null;
+    }
+    const a=sources.get(reference.first),b=sources.get(reference.second);
+    if(!a || !b) return null;
+    const epsilon=Math.max(1,a.radius || freeDistance(a.a,a.b),b.radius || freeDistance(b.a,b.b))*1e-7;
+    const contacts=freeContacts(a,b,epsilon).filter(p=>
+        freeParameter(a,p,epsilon)!==null && freeParameter(b,p,epsilon)!==null);
+    return contacts.length===reference.count ? contacts[reference.branch] || null : null;
+}
+
 // Compare congruent segments under rotation or reflection around a construction center.
 function findSimilarFreeSegments(reference, pieces, origin) {
     const family = curve => curve.key ? curve.key.split('@')[0].split('/')[0] : 'free-lines';
@@ -121,6 +181,7 @@ function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
     const connections=[];
+    let nextConnectionId=1, geometrySignature=null, geometryNotice='';
     let pendingConnection=null;
     let lastHiddenId=null, similarPieces=[];
     let selected=[],choices=[],choice=0;
@@ -134,10 +195,30 @@ function createFreeEditor(state,update,repaint) {
             el('create-editor').setAttribute('aria-pressed',String(api.active));
             el('create-editor').textContent=api.active?'Exit editor':'Create editor';
             if (!api.active && !api.hasEdits()) return;
-            for (const {a,b} of connections) {
+            const sources=freeSourceRegistry(state,curves);
+            const signature=JSON.stringify([...sources].map(([key,c])=>[key,c.center,c.radius,c.start,c.end,c.a,c.b]));
+            if(geometrySignature!==null && signature!==geometrySignature) {
+                if(styles.size) geometryNotice='Geometry changed. Previous segment styles were cleared; reselect segments to style the updated geometry.';
+                styles.clear();
+                history.splice(0,history.length,...history.filter(edit=>edit.connection));
+                lastHiddenId=null;
+                reset();
+            }
+            geometrySignature=signature;
+            let unavailable=0;
+            for (const connection of connections) {
+                // Upgrade in-memory coordinate connections when their sources can still be identified.
+                connection.aRef ||= captureFreePoint(connection.a,sources);
+                connection.bRef ||= captureFreePoint(connection.b,sources);
+                connection.key ||= 'connection/'+nextConnectionId++;
+                const a=resolveFreePoint(connection.aRef,sources);
+                const b=resolveFreePoint(connection.bRef,sources);
+                if(!a || !b || freeDistance(a,b)<1e-9) { unavailable++; continue; }
                 const element=svg('line',{x1:a.x,y1:-a.y,x2:b.x,y2:-b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
                 board.append(element);
-                curves.push({a,b,element});
+                const curve={a,b,element,key:connection.key};
+                curves.push(curve);
+                sources.set(connection.key,curve);
             }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
             const reference=pieces.find(piece=>piece.id===lastHiddenId && styles.get(piece.id)==='hidden');
@@ -164,7 +245,7 @@ function createFreeEditor(state,update,repaint) {
                 const [a,b]=selected.map(id=>points.get(id));
                 const epsilon=freeDistance(a,b)*1e-8;
                 const connected=curves.some(curve=>curve.a && freeParameter(curve,a,epsilon)!==null && freeParameter(curve,b,epsilon)!==null);
-                if (!connected) pendingConnection={a,b};
+                if (!connected) pendingConnection={a,b,aRef:captureFreePoint(a,sources),bRef:captureFreePoint(b,sources),key:'connection/'+nextConnectionId++};
             }
             el('free-connect').disabled=!pendingConnection;
             choice=choice<choices.length?choice:0;
@@ -201,6 +282,8 @@ function createFreeEditor(state,update,repaint) {
                 board.append(dot);
             }
             el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
+            if(geometryNotice) el('free-help').textContent+=' '+geometryNotice;
+            if(unavailable) el('free-help').textContent+=' '+unavailable+' connection(s) unavailable because a referenced point no longer exists.';
             el('free-next').hidden=choices.length<2;
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
             el('free-clear').disabled=!selected.length;
