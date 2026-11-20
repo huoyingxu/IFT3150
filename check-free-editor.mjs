@@ -210,3 +210,69 @@ assert.equal(addedCurves.filter(c=>c.a).length,1);
 click('free-undo');
 assert.equal(addedCurves.filter(c=>c.a).length,0);
 console.log('Passed similar connection creation, 17 all-group / 5 local copies, duplicate prevention, live endpoint references and batch undo.');
+// Recreate both edits through the UI and change the outer symmetry repeatedly.
+let persistentCurves;
+const persistentPaint=()=>{
+    board.children=[];
+    const currentEntries=context.collectArcCircles(groupState.nodes,groupState.evaluation);
+    persistentCurves=currentEntries.flatMap(entry=>context.splitCircleArcs(entry,currentEntries).map(arc=>({
+        ...entry.circle,start:arc.start,end:arc.end,key:arc.key,element:element({stroke:'pink'})
+    })));
+    const centers=groupState.nodes.flatMap(node=>(groupState.evaluation.results.get(node.id)||[]).map(c=>c.center));
+    editor.render(persistentCurves,board,(_,attrs)=>element(attrs),centers);
+};
+editor=context.createFreeEditor(groupState,persistentPaint,persistentPaint);
+click('create-editor');
+const selectNear=p=>board.children.find(e=>typeof e.attrs.cx==='number' && Math.hypot(e.attrs.cx-p.x,-e.attrs.cy-p.y)<1e-6).onclick();
+selectNear(referencePiece.a);selectNear(referencePiece.b);
+for(let i=0;i<4 && !board.children.some(e=>e.attrs.d===referencePiece.path && e.attrs.stroke==='#ffce78');i++)click('free-next');
+assert.ok(board.children.some(e=>e.attrs.d===referencePiece.path && e.attrs.stroke==='#ffce78'));
+click('free-hide');click('free-similar');
+const hiddenChildren=()=>persistentCurves.filter(c=>c.key.startsWith(small.id+'@') && c.element.removed && !c.element.children.length).length;
+assert.equal(hiddenChildren(),18);
+selectNear(prototypeLine.a);selectNear(prototypeLine.b);click('free-connect');click('free-add-similar');
+assert.equal(persistentCurves.filter(c=>c.a).length,18);
+for(const n of [4,5,3]) {
+    grandparent.params.nRosy=n;
+    grandparent.params.x=12*n;
+    grandparent.params.rotation=90+10*n;
+    groupState.evaluation=context.evaluateGraph(groupState.nodes);
+    persistentPaint();
+    assert.equal(persistentCurves.filter(c=>c.a).length,n*6,'all groups receive new spokes');
+    assert.equal(hiddenChildren(),n*6,'hidden inward arcs survive topology change');
+}
+click('free-undo');
+assert.equal(persistentCurves.filter(c=>c.a).length,1);
+click('free-undo');
+assert.equal(persistentCurves.filter(c=>c.a).length,0);
+click('free-undo');
+assert.equal(hiddenChildren(),1);
+click('free-undo');
+assert.equal(hiddenChildren(),0);
+console.log('Passed retained group hide/add rules at nRosy 3/4/5/3 with translation, rotation and undo after topology changes.');
+vm.runInContext(fs.readFileSync('gap-tangent-circles.js','utf8'),context);
+const gap=context.makeNode('gapTangent');gap.sourceId=parents.id;
+groupState.nodes.push(gap);
+grandparent.params.nRosy=3;
+groupState.evaluation=context.evaluateGraph(groupState.nodes);
+function gapScene() {
+    const entries=context.collectArcCircles(groupState.nodes,groupState.evaluation);
+    const curves=entries.flatMap(entry=>context.splitCircleArcs(entry,entries).map(arc=>({...entry.circle,...arc,key:arc.key})));
+    return {pieces:context.buildFreeSegments(curves).pieces,sources:context.freeSourceRegistry(groupState,curves)};
+}
+let gapData=gapScene();
+const outerCenter=groupState.evaluation.results.get(grandparent.id)[0].center;
+const inwardGap=gapData.pieces.find(p=>p.curve.key.startsWith(gap.id+'@') &&
+    Math.hypot(p.middle.x-outerCenter.x,p.middle.y-outerCenter.y)<Math.hypot(p.curve.center.x-outerCenter.x,p.curve.center.y-outerCenter.y)-p.curve.radius*.5);
+assert.ok(inwardGap);
+const gapReference=context.freeStyleReference(inwardGap,gapData.sources);
+for(const n of [3,4,5,3]) {
+    grandparent.params.nRosy=n;
+    groupState.evaluation=context.evaluateGraph(groupState.nodes);
+    gapData=gapScene();
+    const seed=context.resolveFreeStyle(gapReference,gapData.pieces,gapData.sources);
+    assert.ok(seed.length,'gap arc reference resolves');
+    const matches=seed.flatMap(p=>context.relatedFreePieces(p,gapData.pieces,groupState,'groups'));
+    assert.equal(new Set(matches.map(p=>p.id)).size,2*n);
+}
+console.log('Passed gap circle hide rules at nRosy 3/4/5/3.');

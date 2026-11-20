@@ -242,19 +242,68 @@ function similarFreeConnections(connection,state,sources,points,curves,scope) {
     return candidates;
 }
 
+function freeStyleReference(piece,sources) {
+    const match=piece.curve.key?.match(/^([^@]+)@\d+:(\d+)/);
+    const key=match && !piece.curve.a ? match[1]+':'+match[2] : piece.curve.key?.replace(/@\d+:/g, ':');
+    const curve=sources.get(key);
+    if(!curve) return {id:piece.id};
+    const aRef=captureFreePoint(piece.a,sources),bRef=captureFreePoint(piece.b,sources);
+    const start=freeParameter(curve,piece.a,1e-6),end=freeParameter(curve,piece.b,1e-6);
+    const middle=freeParameter(curve,piece.middle,1e-6);
+    const wrap=value=>(value%1+1)%1;
+    return {key,aRef,bRef,full:!curve.a && freeDistance(piece.a,piece.b)<1e-7,
+        forward:curve.a || wrap(middle-start)<=wrap(end-start)+1e-7};
+}
+
+function resolveFreeStyle(reference,pieces,sources) {
+    if(!reference.key) return pieces.filter(piece=>piece.id===reference.id);
+    const curve=sources.get(reference.key);
+    if(!curve) return [];
+    const a=resolveFreePoint(reference.aRef,sources),b=resolveFreePoint(reference.bRef,sources);
+    if(!a || !b) return [];
+    const epsilon=Math.max(1,curve.radius || freeDistance(curve.a,curve.b))*1e-7;
+    const start=freeParameter(curve,a,epsilon),end=freeParameter(curve,b,epsilon);
+    if(start===null || end===null) return [];
+    const wrap=value=>(value%1+1)%1;
+    return pieces.filter(piece=>{
+        const match=piece.curve.key?.match(/^([^@]+)@\d+:(\d+)/);
+        const key=match && !piece.curve.a ? match[1]+':'+match[2] : piece.curve.key?.replace(/@\d+:/g, ':');
+        if(key!==reference.key) return false;
+        const t=freeParameter(curve,piece.middle,epsilon);
+        if(t===null) return false;
+        if(curve.a) return t>Math.min(start,end)-1e-8 && t<Math.max(start,end)+1e-8;
+        if(reference.full) return true;
+        return reference.forward ? wrap(t-start)<=wrap(end-start)+1e-8 : wrap(t-end)<=wrap(start-end)+1e-8;
+    });
+}
+
+function relatedFreePieces(reference,pieces,state,scope) {
+    if(scope!=='global') {
+        const grouped=findGroupedFreeSegments(reference,pieces,state,scope);
+        if(grouped) return grouped;
+    }
+    const nodeId=reference.curve.key?.split('@')[0].split('/')[0];
+    const chain=nodeId && state.nodes ? getSourceChain(state.nodes,nodeId) : [];
+    let roots=chain.filter(node=>node.kind==='circle').flatMap(node=>state.evaluation.results.get(node.id)||[]);
+    if(!roots.length) roots=(state.nodes || []).filter(node=>node.kind==='circle').flatMap(node=>state.evaluation.results.get(node.id)||[]);
+    const outer=roots.sort((a,b)=>b.radius-a.radius)[0];
+    return outer ? findSimilarFreeSegments(reference,pieces,outer.center) : [];
+}
+
 function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
-    const connections=[];
+    const connections=[], connectionRules=[], styleRules=[];
+    let livePieces=[],liveSources=new Map(),lastHiddenReference=null;
     let lastConnection=null, pendingSimilar=[];
-    let nextConnectionId=1, geometrySignature=null, geometryNotice='';
+    let nextConnectionId=1, geometrySignature=null;
     let pendingConnection=null;
     let lastHiddenId=null, similarPieces=[], previewSimilar=false;
     let selected=[],choices=[],choice=0;
     function reset() { pendingConnection=null; selected=[];choices=[];choice=0; }
     const api={
         active:false,
-        hasEdits:()=>styles.size>0 || connections.length>0,
+        hasEdits:()=>styleRules.length>0 || connections.length>0 || connectionRules.length>0,
         close(){api.active=false;reset();},
         render(curves,board,svg,centers){
             el('free-panel').hidden=!api.active;
@@ -264,29 +313,40 @@ function createFreeEditor(state,update,repaint) {
             const sources=freeSourceRegistry(state,curves);
             const signature=JSON.stringify([...sources].map(([key,c])=>[key,c.center,c.radius,c.start,c.end,c.a,c.b]));
             if(geometrySignature!==null && signature!==geometrySignature) {
-                if(styles.size) geometryNotice='Geometry changed. Previous segment styles were cleared; reselect segments to style the updated geometry.';
-                styles.clear();
-                history.splice(0,history.length,...history.filter(edit=>edit.connection || edit.connections));
-                lastHiddenId=null;
                 reset();
             }
             geometrySignature=signature;
             let unavailable=0;
-            for (const connection of connections) {
+            function drawConnection(connection) {
                 // Upgrade in-memory coordinate connections when their sources can still be identified.
                 connection.aRef ||= captureFreePoint(connection.a,sources);
                 connection.bRef ||= captureFreePoint(connection.b,sources);
                 connection.key ||= 'connection/'+nextConnectionId++;
                 const a=resolveFreePoint(connection.aRef,sources);
                 const b=resolveFreePoint(connection.bRef,sources);
-                if(!a || !b || freeDistance(a,b)<1e-9) { unavailable++; continue; }
+                if(!a || !b || freeDistance(a,b)<1e-9) { unavailable++; return; }
                 const element=svg('line',{x1:a.x,y1:-a.y,x2:b.x,y2:-b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
                 board.append(element);
                 const curve={a,b,element,key:connection.key};
                 curves.push(curve);
                 sources.set(connection.key,curve);
             }
+            connections.forEach(drawConnection);
+            for(const rule of connectionRules) {
+                const available=buildFreeSegments(curves,centers).points;
+                const generated=similarFreeConnections(rule.template,state,sources,available,curves,rule.scope);
+                generated.forEach((connection,index)=>drawConnection({...connection,key:rule.key+'/'+index}));
+            }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
+            livePieces=pieces;
+            liveSources=sources;
+            styles.clear();
+            for(const rule of styleRules) {
+                const seed=resolveFreeStyle(rule.reference,pieces,sources);
+                const targets=rule.scope ? seed.flatMap(piece=>relatedFreePieces(piece,pieces,state,rule.scope)) : seed;
+                for(const piece of targets) styles.set(piece.id,rule.style);
+            }
+            if(lastHiddenReference) lastHiddenId=resolveFreeStyle(lastHiddenReference,pieces,sources)[0]?.id;
             pendingSimilar=similarFreeConnections(
                 connections.includes(lastConnection)?lastConnection:null,
                 state,sources,points,curves,el('free-scope').value || 'groups');
@@ -294,21 +354,7 @@ function createFreeEditor(state,update,repaint) {
             el('free-add-similar').textContent=pendingSimilar.length?'Add similar segments ('+pendingSimilar.length+')':'Add similar segments';
             const reference=pieces.find(piece=>piece.id===lastHiddenId && styles.get(piece.id)==='hidden');
             similarPieces=[];
-            if(reference) {
-                const nodeId=reference.curve.key?.split('@')[0].split('/')[0];
-                const chain=nodeId && state.nodes ? getSourceChain(state.nodes,nodeId) : [];
-                const roots=chain.filter(node=>node.kind==='circle')
-                    .flatMap(node=>state.evaluation.results.get(node.id)||[]);
-                if (!roots.length && state.nodes) {
-                    roots.push(...state.nodes.filter(node=>node.kind==='circle')
-                        .flatMap(node=>state.evaluation.results.get(node.id)||[]));
-                }
-                const outer=roots.sort((a,b)=>b.radius-a.radius)[0];
-                const scope=el('free-scope').value || 'groups';
-                const grouped=scope==='global'?null:findGroupedFreeSegments(reference,pieces,state,scope);
-                if(grouped) similarPieces=grouped;
-                else if(outer) similarPieces=findSimilarFreeSegments(reference,pieces,outer.center);
-            }
+            if(reference) similarPieces=relatedFreePieces(reference,pieces,state,el('free-scope').value || 'groups');
             const matches=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
             el('free-similar').disabled=!matches.length;
             el('free-preview').disabled=!matches.length && !pendingSimilar.length;
@@ -367,7 +413,6 @@ function createFreeEditor(state,update,repaint) {
                 board.append(dot);
             }
             el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
-            if(geometryNotice) el('free-help').textContent+=' '+geometryNotice;
             if(unavailable) el('free-help').textContent+=' '+unavailable+' connection(s) unavailable because a referenced point no longer exists.';
             el('free-next').hidden=choices.length<2;
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
@@ -388,9 +433,9 @@ function createFreeEditor(state,update,repaint) {
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
     el('free-add-similar').onclick=()=>{
         if(!api.active || !pendingSimilar.length) return;
-        const added=pendingSimilar.map(connection=>({...connection,key:'connection/'+nextConnectionId++}));
-        connections.push(...added);
-        history.push({connections:added});
+        const rule={template:lastConnection,scope:el('free-scope').value || 'groups',key:'connection-rule/'+nextConnectionId++};
+        connectionRules.push(rule);
+        history.push({connectionRule:rule});
         reset();
         repaint();
     };
@@ -400,25 +445,36 @@ function createFreeEditor(state,update,repaint) {
         if (!api.active) return;
         const ids=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
         if (!ids.length) return;
-        history.push({batch:ids.map(id=>({id,previous:styles.get(id)}))});
-        ids.forEach(id=>styles.set(id,'hidden'));
+        const rule={reference:lastHiddenReference,scope:el('free-scope').value || 'groups',style:'hidden'};
+        styleRules.push(rule);
+        history.push({styleRule:rule});
         reset();
         repaint();
     };
     for(const [button,style] of [['free-dash','dashed'],['free-hide','hidden'],['free-solid','solid']]) {
-        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);if(style==='hidden'){lastHiddenId=id;previewSimilar=false;}reset();repaint();};
+        el(button).onclick=()=>{
+            const id=choices[choice];
+            const piece=livePieces.find(piece=>piece.id===id);
+            if(!piece || styles.get(id)===style) return;
+            const reference=freeStyleReference(piece,liveSources);
+            const rule={reference,style};
+            styleRules.push(rule);
+            history.push({styleRule:rule});
+            if(style==='hidden') {
+                lastHiddenId=id;
+                lastHiddenReference=reference;
+                previewSimilar=false;
+            }
+            reset();
+            repaint();
+        };
     }
     el('free-undo').onclick=()=>{
         const edit=history.pop();
         if(!edit) return;
-        if(edit.connections) connections.splice(connections.length-edit.connections.length,edit.connections.length);
-        else if(edit.connection) connections.pop();
-        else {
-            for(const entry of edit.batch || [edit]) {
-                if(entry.previous) styles.set(entry.id,entry.previous);
-                else styles.delete(entry.id);
-            }
-        }
+        if(edit.connectionRule) connectionRules.splice(connectionRules.indexOf(edit.connectionRule),1);
+        else if(edit.connection) connections.splice(connections.indexOf(edit.connection),1);
+        else if(edit.styleRule) styleRules.splice(styleRules.indexOf(edit.styleRule),1);
         reset();
         repaint();
     };
