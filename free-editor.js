@@ -155,7 +155,7 @@ function resolveFreePoint(reference,sources) {
 }
 
 // Compare congruent segments under rotation or reflection around a construction center.
-function findSimilarFreeSegments(reference, pieces, origin) {
+function findSimilarFreeSegments(reference, pieces, origin, targetOrigin = () => origin) {
     const family = curve => curve.key ? curve.key.split('@')[0].split('/')[0] : 'free-lines';
     const tolerance = Math.max(1, freeDistance(reference.a,origin),
         freeDistance(reference.b,origin), freeDistance(reference.middle,origin)) * 1e-6;
@@ -165,7 +165,7 @@ function findSimilarFreeSegments(reference, pieces, origin) {
             Boolean(piece.curve.a) !== Boolean(reference.curve.a)) return false;
         if (!piece.curve.a && Math.abs(piece.curve.radius-reference.curve.radius)>tolerance) return false;
         return [[piece.a,piece.middle,piece.b],[piece.b,piece.middle,piece.a]].some(points => {
-            const target = [origin,...points];
+            const target = [targetOrigin(piece),...points];
             for (let i=0;i<source.length;i++) {
                 for (let j=i+1;j<source.length;j++) {
                     if (Math.abs(freeDistance(source[i],source[j])-freeDistance(target[i],target[j]))>tolerance)
@@ -177,13 +177,36 @@ function findSimilarFreeSegments(reference, pieces, origin) {
     });
 }
 
+function freeParentCircle(piece,state) {
+    const match=piece.curve.key?.match(/^([^@]+)@\d+:(\d+)/);
+    if(!match) return null;
+    const node=state.nodes?.find(node=>node.id===match[1]);
+    if(node?.kind!=='tangent') return null;
+    let index=Number(match[2]);
+    for(const parent of state.evaluation.results.get(node.sourceId) || []) {
+        if(index<parent.axis.nRosy) return parent;
+        index-=parent.axis.nRosy;
+    }
+    return null;
+}
+
+function findGroupedFreeSegments(reference,pieces,state,scope) {
+    const parent=freeParentCircle(reference,state);
+    if(!parent) return null;
+    const candidates=pieces.filter(piece=>{
+        const other=freeParentCircle(piece,state);
+        return other && (scope!=='local' || other===parent);
+    });
+    return findSimilarFreeSegments(reference,candidates,parent.center,piece=>freeParentCircle(piece,state).center);
+}
+
 function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
     const connections=[];
     let nextConnectionId=1, geometrySignature=null, geometryNotice='';
     let pendingConnection=null;
-    let lastHiddenId=null, similarPieces=[];
+    let lastHiddenId=null, similarPieces=[], previewSimilar=false;
     let selected=[],choices=[],choice=0;
     function reset() { pendingConnection=null; selected=[];choices=[];choice=0; }
     const api={
@@ -233,10 +256,14 @@ function createFreeEditor(state,update,repaint) {
                         .flatMap(node=>state.evaluation.results.get(node.id)||[]));
                 }
                 const outer=roots.sort((a,b)=>b.radius-a.radius)[0];
-                if(outer) similarPieces=findSimilarFreeSegments(reference,pieces,outer.center);
+                const scope=el('free-scope').value || 'groups';
+                const grouped=scope==='global'?null:findGroupedFreeSegments(reference,pieces,state,scope);
+                if(grouped) similarPieces=grouped;
+                else if(outer) similarPieces=findSimilarFreeSegments(reference,pieces,outer.center);
             }
             const matches=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
             el('free-similar').disabled=!matches.length;
+            el('free-preview').disabled=!matches.length;
             el('free-similar').textContent=matches.length ? 'Hide similar segments ('+matches.length+')' : 'Hide similar segments';
             if (selected.some(id=>!points.has(id))) reset();
             choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
@@ -270,6 +297,11 @@ function createFreeEditor(state,update,repaint) {
                 curve.element.remove();
             }
             if (!api.active) return;
+            if(previewSimilar) {
+                for(const piece of similarPieces.filter(piece=>styles.get(piece.id)!=='hidden')) {
+                    board.append(svg('path',{d:piece.path,fill:'none',stroke:'#ffd178','stroke-width':4,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
+                }
+            }
             const chosen=pieces.find(p=>p.id===choices[choice]);
             if(chosen) board.append(svg('path',{d:chosen.path,fill:'none',stroke:'#ffce78','stroke-width':5,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
             const scale=board.getScreenCTM()?.a || 1;
@@ -300,6 +332,8 @@ function createFreeEditor(state,update,repaint) {
         repaint();
     };
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
+    el('free-scope').onchange=()=>{previewSimilar=true;repaint();};
+    el('free-preview').onclick=()=>{previewSimilar=!previewSimilar;repaint();};
     el('free-similar').onclick=()=>{
         if (!api.active) return;
         const ids=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
@@ -310,7 +344,7 @@ function createFreeEditor(state,update,repaint) {
         repaint();
     };
     for(const [button,style] of [['free-dash','dashed'],['free-hide','hidden'],['free-solid','solid']]) {
-        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);if(style==='hidden')lastHiddenId=id;reset();repaint();};
+        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);if(style==='hidden'){lastHiddenId=id;previewSimilar=false;}reset();repaint();};
     }
     el('free-undo').onclick=()=>{
         const edit=history.pop();

@@ -146,3 +146,29 @@ click('free-undo');
 assert.equal(liveCurves.length,0);
 console.log('Passed source-referenced centers/tangencies, missing sources, nRosy/rotation/translation updates and connection undo.');
 
+const grandparent=context.makeNode('circle');
+const parents=context.makeNode('tangent'); parents.sourceId=grandparent.id;parents.params.nRosy=6;
+const small=context.makeNode('tangent');small.sourceId=parents.id;
+const groupState={nodes:[grandparent,parents,small],evaluation:context.evaluateGraph([grandparent,parents,small])};
+const entries=context.collectArcCircles(groupState.nodes,groupState.evaluation);
+const groupedCurves=entries.flatMap(entry=>context.splitCircleArcs(entry,entries).map(arc=>({
+    ...entry.circle,start:arc.start,end:arc.end,key:arc.key
+})));
+const groupPieces=context.buildFreeSegments(groupedCurves).pieces;
+const smallPieces=groupPieces.filter(piece=>piece.curve.key.startsWith(small.id+'@'));
+const referencePiece=smallPieces.find(piece=>{
+    const parent=context.freeParentCircle(piece,groupState);
+    const d=vm.runInContext('freeDistance',context);
+    return d(piece.middle,parent.center)<d(piece.curve.center,parent.center)-piece.curve.radius*.8;
+});
+assert.ok(referencePiece);
+const matching=context.findGroupedFreeSegments(referencePiece,groupPieces,groupState,'groups');
+const localMatching=context.findGroupedFreeSegments(referencePiece,groupPieces,groupState,'local');
+assert.equal(new Set(matching.map(piece=>piece.id)).size,18);
+assert.equal(new Set(localMatching.map(piece=>piece.id)).size,6);
+assert.ok(matching.every(piece=>{
+    const parent=context.freeParentCircle(piece,groupState);
+    const d=vm.runInContext('freeDistance',context);
+    return d(piece.middle,parent.center)<d(piece.curve.center,parent.center);
+}));
+console.log('Passed screenshot configuration: 3 parent circles x 6 children; exactly 18 inward arcs or 6 local arcs, outer arcs preserved.');
