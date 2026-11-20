@@ -88,10 +88,33 @@ function buildFreeSegments(curves, centers = []) {
             const id=[...([worldKey(a),worldKey(b)].sort()),worldKey(middle)].join('/');
             const path=curve.a ? `M ${a.x} ${-a.y} L ${b.x} ${-b.y}` :
                 circleArcPath(curve,{start:curve.start+from.t*(curve.end-curve.start),end:curve.start+to.t*(curve.end-curve.start)});
-            pieces.push({id,ends,path,curve});
+            pieces.push({id,ends,path,curve,a,b,middle});
         }
     });
     return {points,pieces,centerIds};
+}
+
+// Compare congruent segments under rotation or reflection around a construction center.
+function findSimilarFreeSegments(reference, pieces, origin) {
+    const family = curve => curve.key ? curve.key.split('@')[0].split('/')[0] : 'free-lines';
+    const tolerance = Math.max(1, freeDistance(reference.a,origin),
+        freeDistance(reference.b,origin), freeDistance(reference.middle,origin)) * 1e-6;
+    const source = [origin,reference.a,reference.middle,reference.b];
+    return pieces.filter(piece => {
+        if (family(piece.curve) !== family(reference.curve) ||
+            Boolean(piece.curve.a) !== Boolean(reference.curve.a)) return false;
+        if (!piece.curve.a && Math.abs(piece.curve.radius-reference.curve.radius)>tolerance) return false;
+        return [[piece.a,piece.middle,piece.b],[piece.b,piece.middle,piece.a]].some(points => {
+            const target = [origin,...points];
+            for (let i=0;i<source.length;i++) {
+                for (let j=i+1;j<source.length;j++) {
+                    if (Math.abs(freeDistance(source[i],source[j])-freeDistance(target[i],target[j]))>tolerance)
+                        return false;
+                }
+            }
+            return true;
+        });
+    });
 }
 
 function createFreeEditor(state,update,repaint) {
@@ -99,6 +122,7 @@ function createFreeEditor(state,update,repaint) {
     const styles=new Map(),history=[];
     const connections=[];
     let pendingConnection=null;
+    let lastHiddenId=null, similarPieces=[];
     let selected=[],choices=[],choice=0;
     function reset() { pendingConnection=null; selected=[];choices=[];choice=0; }
     const api={
@@ -116,6 +140,23 @@ function createFreeEditor(state,update,repaint) {
                 curves.push({a,b,element});
             }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
+            const reference=pieces.find(piece=>piece.id===lastHiddenId && styles.get(piece.id)==='hidden');
+            similarPieces=[];
+            if(reference) {
+                const nodeId=reference.curve.key?.split('@')[0].split('/')[0];
+                const chain=nodeId && state.nodes ? getSourceChain(state.nodes,nodeId) : [];
+                const roots=chain.filter(node=>node.kind==='circle')
+                    .flatMap(node=>state.evaluation.results.get(node.id)||[]);
+                if (!roots.length && state.nodes) {
+                    roots.push(...state.nodes.filter(node=>node.kind==='circle')
+                        .flatMap(node=>state.evaluation.results.get(node.id)||[]));
+                }
+                const outer=roots.sort((a,b)=>b.radius-a.radius)[0];
+                if(outer) similarPieces=findSimilarFreeSegments(reference,pieces,outer.center);
+            }
+            const matches=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
+            el('free-similar').disabled=!matches.length;
+            el('free-similar').textContent=matches.length ? 'Hide similar segments ('+matches.length+')' : 'Hide similar segments';
             if (selected.some(id=>!points.has(id))) reset();
             choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
             pendingConnection=null;
@@ -176,9 +217,30 @@ function createFreeEditor(state,update,repaint) {
         repaint();
     };
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
+    el('free-similar').onclick=()=>{
+        if (!api.active) return;
+        const ids=[...new Set(similarPieces.map(piece=>piece.id))].filter(id=>styles.get(id)!=='hidden');
+        if (!ids.length) return;
+        history.push({batch:ids.map(id=>({id,previous:styles.get(id)}))});
+        ids.forEach(id=>styles.set(id,'hidden'));
+        reset();
+        repaint();
+    };
     for(const [button,style] of [['free-dash','dashed'],['free-hide','hidden'],['free-solid','solid']]) {
-        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);reset();repaint();};
+        el(button).onclick=()=>{const id=choices[choice];if(!id || styles.get(id)===style)return;history.push({id,previous:styles.get(id)});styles.set(id,style);if(style==='hidden')lastHiddenId=id;reset();repaint();};
     }
-    el('free-undo').onclick=()=>{const edit=history.pop();if(!edit)return;if(edit.connection) connections.pop();else if(edit.previous)styles.set(edit.id,edit.previous);else styles.delete(edit.id);reset();repaint();};
+    el('free-undo').onclick=()=>{
+        const edit=history.pop();
+        if(!edit) return;
+        if(edit.connection) connections.pop();
+        else {
+            for(const entry of edit.batch || [edit]) {
+                if(entry.previous) styles.set(entry.id,entry.previous);
+                else styles.delete(entry.id);
+            }
+        }
+        reset();
+        repaint();
+    };
     return api;
 }
