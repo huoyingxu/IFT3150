@@ -420,7 +420,7 @@ function createFreeEditor(state,update,repaint) {
             el('free-undo').disabled=!history.length;
         }
     };
-    el('create-editor').onclick=()=>{api.active=!api.active;reset();state.arcEditing=false;state.tangentToolId=null;update();};
+    el('create-editor').onclick=()=>{state.arcPicker?.close();api.active=!api.active;reset();state.arcEditing=false;state.tangentToolId=null;update();};
     el('free-clear').onclick=()=>{reset();repaint();};
     el('free-connect').onclick=()=>{
         if (!api.active || !pendingConnection) return;

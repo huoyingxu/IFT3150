@@ -2,6 +2,11 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
     const config = node.arcConfig;
     const root = document.createElement('div'); root.className = 'arc-construction-fields';
     const changed = () => { onChange(); rebuild(); };
+    function pick(box,title,slot,setter,wizard=false) {
+        const button=document.createElement('button');button.type='button';button.textContent=title;
+        button.onclick=()=>state.arcPicker.open(node.id,slot,setter,wizard);box.append(button);
+    }
+    pick(root,'Pick center / start / end','wizard',null,true);
     function section(title) {
         const box=document.createElement('fieldset'), legend=document.createElement('legend');
         box.className='arc-fieldset'; legend.textContent=title; box.append(legend); return box;
@@ -24,7 +29,7 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
     }
     function circle(box,title,getter,setter) {
         const input=document.createElement('select');input.dataset.arcReference='true';
-        const key=ref=>ref?`${ref.nodeId}:${ref.index}:${ref.count}`:'';
+        const key=ref=>ref?`${ref.nodeId}:${ref.index}`:'';
         input.refreshArcChoices=()=>{
             input.replaceChildren(new Option('Select a circle',''));
             for (const source of state.nodes) {
@@ -39,10 +44,11 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
             input.value=selected;
         };
         input.onchange=()=>{
-            const [nodeId,index,count]=input.value.split(':');
-            setter(input.value?{nodeId,index:Number(index),count:Number(count)}:null);changed();
+            const [nodeId,index]=input.value.split(':');
+            setter(input.value?{nodeId,index:Number(index)}:null);changed();
         };
-        input.refreshArcChoices();return row(box,title,input);
+        input.refreshArcChoices();row(box,title,input);
+        pick(box,'Pick circle on canvas','circle',setter);return input;
     }
     function point(box,title,p) {
         const sub=section(title);
@@ -60,6 +66,7 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
             circle(sub,title+' second circle',()=>p.second,value=>p.second=value);
             menu(sub,title+' intersection',p.branch,[['left','Left of first → second center'],['right','Right of first → second center']],value=>p.branch=value);
         }
+        pick(sub,'Pick '+title.toLowerCase()+' on canvas',title,value=>{Object.assign(p,value);});
         box.append(sub);
     }
     const support=section('1. Support circle');root.append(support);

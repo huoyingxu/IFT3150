@@ -61,6 +61,7 @@ function createRenderedPreview(state, repaint) {
         area.classList.toggle('rendered-mode',toggle.checked);
         image.hidden=!toggle.checked;
         if(toggle.checked) {
+            state.arcPicker?.close();
             state.arcEditing=false;
             state.freeEditor.close();
             state.tangentToolId=null;

@@ -212,3 +212,7 @@ input[type="checkbox"] { accent-color: #a9d998; }
 #rendered-image { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#e9d7b3; }
 #rendered-image[hidden] { display:none; }
 .rendered-mode #drawing-board { visibility:hidden; }
+.arc-pick-panel { padding: 12px; color: #ffce73; background: #202a26; border-bottom: 1px solid #566c60; }
+.arc-pick-panel[hidden] { display: none; }
+.arc-pick-panel button { margin-left: 12px; }
+.arc-construction-fields button { margin: 6px 0; }

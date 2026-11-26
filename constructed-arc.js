@@ -32,7 +32,7 @@ function arcConstructionReferences(config) {
 function resolveArcCircle(ref, evaluate) {
     if (!ref) throw new Error('Select a source circle.');
     const group = evaluate(ref.nodeId);
-    if (group.length !== ref.count || !Number.isInteger(ref.index) || ref.index < 0 || !group[ref.index]) {
+    if ((ref.count !== undefined && group.length !== ref.count) || !Number.isInteger(ref.index) || ref.index < 0 || !group[ref.index]) {
         throw new Error('The source circle count has changed. Select the reference again.');
     }
     if (group[ref.index].type !== 'circle') throw new Error('This reference requires a complete circle, not an arc.');

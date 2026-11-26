@@ -47,6 +47,7 @@ function createTangentTool(state, onChange, editor) {
         editor.notify('Circle created. It updates with its sources and can be used for further tangent constructions.');
     }
     function open(id) {
+        state.arcPicker?.close();
         state.freeEditor?.close();
         state.arcEditing = false;
         state.tangentToolId = id;
