@@ -312,7 +312,7 @@ function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
     const connections=[], connectionRules=[], styleRules=[];
-    let livePieces=[],liveSources=new Map(),lastHiddenReference=null;
+    let livePieces=[],livePoints=new Map(),liveSources=new Map(),lastHiddenReference=null;
     let lastConnection=null, pendingSimilar=[], extensionTarget=null;
     let nextConnectionId=1, geometrySignature=null;
     let pendingConnection=null;
@@ -321,6 +321,11 @@ function createFreeEditor(state,update,repaint) {
     function reset() { pendingConnection=null; selected=[];choices=[];choice=0; }
     const api={
         active:false,
+        arcPoints(){ return [...livePoints.values()].flatMap(position=>{
+            try {const expression=editorPointExpression(captureFreePoint(position,liveSources),liveSources);
+                return [{position,point:{kind:"editorPoint",expression},label:"Editor point ("+position.x.toFixed(1)+", "+position.y.toFixed(1)+")"}];
+            } catch(_){return [];}
+        });},
         hasEdits:()=>styleRules.length>0 || connections.length>0 || connectionRules.length>0,
         close(){api.active=false;reset();},
         render(curves,board,svg,centers){
@@ -348,7 +353,7 @@ function createFreeEditor(state,update,repaint) {
                 const visible=connection.extended&&!api.active?{a,b}:drawn;
                 const element=svg('line',{x1:visible.a.x,y1:-visible.a.y,x2:visible.b.x,y2:-visible.b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
                 board.append(element);
-                const curve={...drawn,element,key:connection.key,displaySegment:connection.extended&&!api.active?{a,b}:null};
+                const curve={...drawn,element,key:connection.key,construction:connection,displaySegment:connection.extended&&!api.active?{a,b}:null};
                 curves.push(curve);
                 sources.set(connection.key,curve);
             }
@@ -359,7 +364,7 @@ function createFreeEditor(state,update,repaint) {
                 generated.forEach((connection,index)=>drawConnection({...connection,key:rule.key+'/'+index}));
             }
             const {points,pieces,centerIds}=buildFreeSegments(curves,centers);
-            livePieces=pieces;
+            livePieces=pieces;livePoints=points;
             liveSources=sources;
             styles.clear();
             for(const rule of styleRules) {

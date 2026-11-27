@@ -17,3 +17,24 @@ outer.params.nRosy=4;state.evaluation=ctx.evaluateGraph(state.nodes);assert.equa
 outer.params.rotation+=33;outer.params.x=50;state.evaluation=ctx.evaluateGraph(state.nodes);assert.equal(state.evaluation.errors.size,0);
 outer.params.nRosy=2;state.evaluation=ctx.evaluateGraph(state.nodes);assert.ok(state.evaluation.errors.has(arc.id));
 console.log('Passed canvas candidates, exclusions, center/start/end construction, parameter changes and missing member handling.');
+for(const file of ['arc-geometry.js','free-editor.js'])vm.runInContext(fs.readFileSync(file,'utf8'),ctx);
+outer.params.nRosy=3;state.evaluation=ctx.evaluateGraph(state.nodes);
+const values=state.evaluation.results.get(group.id),base=state.evaluation.results.get(outer.id)[0];
+const sources=ctx.freeSourceRegistry(state,[]);
+const aRef={kind:'center',key:group.id+':1'},bRef={kind:'center',key:group.id+':2'};
+const line=ctx.extendFreeLine(values[1].center,values[2].center,[{...base,start:0,end:Math.PI*2}]);
+sources.set('connection/test',{...line,construction:{aRef,bRef,extended:true}});
+const hits=ctx.freeContacts(line,{...base,start:0,end:Math.PI*2},1e-7);
+const picked=hits.map(p=>({kind:'editorPoint',expression:ctx.editorPointExpression(ctx.captureFreePoint(p,sources),sources)}));
+for(let i=0;i<2;i++){
+ const actual=ctx.resolveArcPoint(picked[i],id=>state.evaluation.results.get(id));
+ assert.ok(Math.hypot(actual.x-hits[i].x,actual.y-hits[i].y)<1e-6);
+}
+Object.assign(arc.arcConfig,{support:'circle',circle:{nodeId:outer.id,index:0},bounds:'points',startPoint:picked[0],endPoint:picked[1]});
+state.evaluation=ctx.evaluateGraph(state.nodes);assert.equal(state.evaluation.errors.size,0);
+outer.params.nRosy=4;outer.params.radius=200;outer.params.rotation+=24;
+state.evaluation=ctx.evaluateGraph(state.nodes);assert.equal(state.evaluation.errors.size,0);
+const output=state.evaluation.results.get(arc.id)[0];assert.equal(output.radius,200);
+assert.ok(ctx.arcConstructionReferences(arc.arcConfig).some(r=>r.nodeId===group.id));
+assert.throws(()=>ctx.resolveArcPoint(picked[0],id=>id===group.id?[]:state.evaluation.results.get(id)),/no longer exists/);
+console.log('Passed editor extension intersections as exact arc endpoints, dependency tracking, transforms and missing source handling.');

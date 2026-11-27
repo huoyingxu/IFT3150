@@ -11,6 +11,7 @@ function defaultArcConfig() {
 }
 function arcPointReferences(point) {
     if (!point) return [];
+    if(point.kind==='editorPoint') return editorExpressionReferences(point.expression);
     if (point.kind === 'center' || point.kind === 'circlePoint') return [point.circle];
     if (point.kind === 'intersection') return [point.first,point.second];
     return [];
@@ -55,6 +56,7 @@ function arcIntersection(first, second, branch) {
 }
 function resolveArcPoint(point, evaluate) {
     if (!point) throw new Error('Define a reference point.');
+    if(point.kind==='editorPoint') return resolveEditorExpression(point.expression,evaluate);
     if (point.kind === 'coordinates') return createPoint(point.x,point.y);
     if (point.kind === 'center') return resolveArcCircle(point.circle,evaluate).center;
     if (point.kind === 'circlePoint') {
@@ -129,4 +131,52 @@ function constructedArcBounds(arc) {
     const xs = angles.map(a=>arc.center.x+arc.radius*Math.cos(a));
     const ys = angles.map(a=>-arc.center.y-arc.radius*Math.sin(a));
     return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+}
+
+// Capture the construction recipe, never its current screen coordinates.
+function editorPointExpression(ref,sources,visiting=new Set()) {
+    function source(key) {
+        if(visiting.has(key))throw new Error('Cyclic editor construction.');
+        const curve=sources.get(key);if(!curve)throw new Error('Missing editor source.');
+        const match=key.match(/^(node-\d+):(\d+)$/);
+        if(match)return {type:'geometry',nodeId:match[1],index:Number(match[2])};
+        if(curve.construction){
+            const seen=new Set(visiting);seen.add(key);
+            return {type:'line',a:editorPointExpression(curve.construction.aRef,sources,seen),
+                b:editorPointExpression(curve.construction.bRef,sources,seen),extended:Boolean(curve.construction.extended)};
+        }
+        throw new Error('This point source is not supported for arc construction.');
+    }
+    if(ref.kind==='fixed')throw new Error('Point has no construction reference.');
+    if(ref.kind==='center'||ref.kind==='parameter')return {type:ref.kind,source:source(ref.key),t:ref.t};
+    return {type:'intersection',first:source(ref.first),second:source(ref.second),branch:ref.branch,count:ref.count};
+}
+function editorExpressionReferences(expr) {
+    if(!expr)return [];
+    if(expr.type==='geometry')return [{nodeId:expr.nodeId,index:expr.index}];
+    return ['source','first','second','a','b'].flatMap(key=>editorExpressionReferences(expr[key]));
+}
+function resolveEditorExpression(expr,evaluate) {
+    function geometry(e){
+        if(e.type==='geometry'){
+            const object=evaluate(e.nodeId)[e.index];
+            if(!object)throw new Error('The editor point source no longer exists.');
+            return {...object,start:object.type==='arc'?object.start:(object.axis?.rotation||0)*Math.PI/180,
+                end:object.type==='arc'?object.end:(object.axis?.rotation||0)*Math.PI/180+Math.PI*2};
+        }
+        const a=resolveEditorExpression(e.a,evaluate),b=resolveEditorExpression(e.b,evaluate);
+        if(freeDistance(a,b)<1e-9)throw new Error('The editor line endpoints coincide.');
+        return {a,b,extended:e.extended};
+    }
+    if(expr.type==='center')return geometry(expr.source).center;
+    if(expr.type==='parameter'){
+        const curve=geometry(expr.source);
+        if(curve.extended)throw new Error('Choose an intersection, not the display end of an extended line.');
+        return freePoint(curve,expr.t);
+    }
+    const a=geometry(expr.first),b=geometry(expr.second);
+    const epsilon=Math.max(1,a.radius||freeDistance(a.a,a.b),b.radius||freeDistance(b.a,b.b))*1e-7;
+    const contacts=freeContacts(a,b,epsilon).filter(p=>(a.extended||freeParameter(a,p,epsilon)!==null)&&(b.extended||freeParameter(b,p,epsilon)!==null));
+    if(contacts.length!==expr.count||!contacts[expr.branch])throw new Error('The editor intersection is no longer available.');
+    return contacts[expr.branch];
 }

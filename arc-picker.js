@@ -24,6 +24,14 @@ function arcPickCandidates(state, nodeId) {
             } catch (_) { /* Disjoint and concentric circles have no selectable contact. */ }
         }
     }
+    for(const candidate of state.freeEditor?.arcPoints()||[]) {
+        const refs=arcPointReferences(candidate.point);
+        if(!refs.every(ref=>canUseTangentSource(state.nodes,nodeId,ref.nodeId)))continue;
+        try {
+            const position=resolveArcPoint(candidate.point,id=>state.evaluation.results.get(id)||[]);
+            if(position && !points.some(p=>Math.hypot(p.position.x-position.x,p.position.y-position.y)<1e-7))points.push({...candidate,position});
+        }catch(_){/* Do not expose missing or display-only endpoints. */}
+    }
     return {circles,points};
 }
 

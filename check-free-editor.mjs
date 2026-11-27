@@ -276,6 +276,7 @@ for(const n of [3,4,5,3]) {
     assert.equal(new Set(matches.map(p=>p.id)).size,2*n);
 }
 console.log('Passed gap circle hide rules at nRosy 3/4/5/3.');
+vm.runInContext(fs.readFileSync('constructed-arc.js','utf8'),context);
 // Extended authored lines expose intersections, preserve dependencies and undo.
 {
  const root=context.makeNode('circle'),group=context.makeNode('tangent');group.sourceId=root.id;
@@ -306,6 +307,8 @@ console.log('Passed gap circle hide rules at nRosy 3/4/5/3.');
  const outer=state.evaluation.results.get(root.id)[0];
  const contacts=context.freeContacts(extended,{...outer,start:0,end:2*Math.PI},1e-7);
  assert.equal(contacts.length,2);
+ const arcPicks=extensionEditor.arcPoints();
+ for(const p of contacts)assert.ok(arcPicks.some(c=>Math.hypot(c.position.x-p.x,c.position.y-p.y)<1e-6));
  for(const p of contacts) assert.ok(board.children.some(e=>Math.hypot((e.attrs.cx??1e9)-p.x,(e.attrs.cy??1e9)+p.y)<1e-6));
  point(contacts[0].x,contacts[0].y);point(contacts[1].x,contacts[1].y);
  assert.equal(document.getElementById('free-connect').disabled,true);

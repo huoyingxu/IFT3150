@@ -52,7 +52,7 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
     }
     function point(box,title,p) {
         const sub=section(title);
-        menu(sub,title+' source',p.kind,[['coordinates','Coordinates'],['center','Circle center'],['circlePoint','Point on circle'],['intersection','Circle intersection / tangency']],value=>p.kind=value);
+        menu(sub,title+' source',p.kind,[...(p.kind==='editorPoint'?[['editorPoint','Editor construction point']]:[]),['coordinates','Coordinates'],['center','Circle center'],['circlePoint','Point on circle'],['intersection','Circle intersection / tangency']],value=>p.kind=value);
         if(p.kind==='coordinates') {
             number(sub,title+' X',p.x,value=>p.x=value);number(sub,title+' Y',p.y,value=>p.y=value);
         }
