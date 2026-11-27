@@ -276,3 +276,41 @@ for(const n of [3,4,5,3]) {
     assert.equal(new Set(matches.map(p=>p.id)).size,2*n);
 }
 console.log('Passed gap circle hide rules at nRosy 3/4/5/3.');
+// Extended authored lines expose intersections, preserve dependencies and undo.
+{
+ const root=context.makeNode('circle'),group=context.makeNode('tangent');group.sourceId=root.id;
+ const state={nodes:[root,group]};state.evaluation=context.evaluateGraph(state.nodes);
+ let extensionEditor,drawn=[];
+ const render=()=>{
+  board.children=[];
+  drawn=[...state.evaluation.results.values()].flat().map((c,i)=>({...c,start:0,end:2*Math.PI,key:'shape'+i,element:element({stroke:'pink'})}));
+  const centers=drawn.map(c=>c.center);
+  extensionEditor.render(drawn,board,(_,attrs)=>element(attrs),centers);
+ };
+ extensionEditor=context.createFreeEditor(state,render,render);
+ click('create-editor');
+ const a=state.evaluation.results.get(group.id)[1].center,b=state.evaluation.results.get(group.id)[2].center;
+ point(a.x,a.y);point(b.x,b.y);click('free-connect');
+ assert.equal(document.getElementById('free-extend').disabled,false);
+ click('free-extend');
+ const extended=drawn.find(c=>c.key?.startsWith('connection/'));
+ assert.ok(extended.a.x<a.x && extended.b.x>b.x);
+ const outer=state.evaluation.results.get(root.id)[0];
+ const contacts=context.freeContacts(extended,{...outer,start:0,end:2*Math.PI},1e-7);
+ assert.equal(contacts.length,2);
+ for(const p of contacts) assert.ok(board.children.some(e=>Math.hypot((e.attrs.cx??1e9)-p.x,(e.attrs.cy??1e9)+p.y)<1e-6));
+ point(contacts[0].x,contacts[0].y);point(contacts[1].x,contacts[1].y);
+ assert.equal(document.getElementById('free-connect').disabled,true);
+ click('free-clear');click('free-undo');
+ const shortened=drawn.find(c=>c.key?.startsWith('connection/'));
+ assert.ok(Math.hypot(shortened.a.x-a.x,shortened.a.y-a.y)<1e-7);
+ click('free-extend');root.params.nRosy=4;state.evaluation=context.evaluateGraph(state.nodes);render();
+ const moved=drawn.find(c=>c.key?.startsWith('connection/'));
+ const currentA=state.evaluation.results.get(group.id)[1].center,currentB=state.evaluation.results.get(group.id)[2].center;
+ assert.ok(context.freeParameter(moved,currentA,1e-6)!==null);
+ assert.ok(context.freeParameter(moved,currentB,1e-6)!==null);
+ const vertical=context.extendFreeLine({x:0,y:-1},{x:0,y:1},[{...outer,start:0,end:2*Math.PI}]);
+ assert.ok(vertical.a.y<-120 && vertical.b.y>120);
+ assert.equal(context.extendFreeLine(a,a,[]),null);
+ console.log('Passed line extension, selectable outer intersections, undo, nRosy updates, vertical and degenerate lines.');
+}

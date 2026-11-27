@@ -51,6 +51,24 @@ function freeContacts(first,second,epsilon) {
     return circleArcContacts(first,second).map(({angle})=>({x:first.center.x+first.radius*Math.cos(angle),y:first.center.y+first.radius*Math.sin(angle)}));
 }
 
+// Display an unbounded construction line across the current geometry, with margin.
+// Endpoints remain dependent on the original two selected points.
+function extendFreeLine(a,b,curves) {
+    const length=freeDistance(a,b);
+    if(length<1e-9) return null;
+    const u={x:(b.x-a.x)/length,y:(b.y-a.y)/length};
+    const project=p=>(p.x-a.x)*u.x+(p.y-a.y)*u.y;
+    let lo=0,hi=length;
+    for(const curve of curves) {
+        const values=curve.a?[project(curve.a),project(curve.b)]:
+            [project(curve.center)-curve.radius,project(curve.center)+curve.radius];
+        lo=Math.min(lo,...values);hi=Math.max(hi,...values);
+    }
+    const margin=Math.max(hi-lo,length)*0.04;
+    return {a:{x:a.x+u.x*(lo-margin),y:a.y+u.y*(lo-margin)},
+        b:{x:a.x+u.x*(hi+margin),y:a.y+u.y*(hi+margin)}};
+}
+
 function buildFreeSegments(curves, centers = []) {
     const size=curves.reduce((n,c)=>Math.max(n,c.a?freeDistance(c.a,c.b):c.radius),1);
     const epsilon=size*1e-8;
@@ -295,7 +313,7 @@ function createFreeEditor(state,update,repaint) {
     const styles=new Map(),history=[];
     const connections=[], connectionRules=[], styleRules=[];
     let livePieces=[],liveSources=new Map(),lastHiddenReference=null;
-    let lastConnection=null, pendingSimilar=[];
+    let lastConnection=null, pendingSimilar=[], extensionTarget=null;
     let nextConnectionId=1, geometrySignature=null;
     let pendingConnection=null;
     let lastHiddenId=null, similarPieces=[], previewSimilar=false;
@@ -317,6 +335,7 @@ function createFreeEditor(state,update,repaint) {
             }
             geometrySignature=signature;
             let unavailable=0;
+            const extensionBounds=[...curves];
             function drawConnection(connection) {
                 // Upgrade in-memory coordinate connections when their sources can still be identified.
                 connection.aRef ||= captureFreePoint(connection.a,sources);
@@ -325,9 +344,10 @@ function createFreeEditor(state,update,repaint) {
                 const a=resolveFreePoint(connection.aRef,sources);
                 const b=resolveFreePoint(connection.bRef,sources);
                 if(!a || !b || freeDistance(a,b)<1e-9) { unavailable++; return; }
-                const element=svg('line',{x1:a.x,y1:-a.y,x2:b.x,y2:-b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
+                const drawn=connection.extended?extendFreeLine(a,b,extensionBounds):{a,b};
+                const element=svg('line',{x1:drawn.a.x,y1:-drawn.a.y,x2:drawn.b.x,y2:-drawn.b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
                 board.append(element);
-                const curve={a,b,element,key:connection.key};
+                const curve={...drawn,element,key:connection.key};
                 curves.push(curve);
                 sources.set(connection.key,curve);
             }
@@ -369,6 +389,16 @@ function createFreeEditor(state,update,repaint) {
                 if (!connected) pendingConnection={a,b,aRef:captureFreePoint(a,sources),bRef:captureFreePoint(b,sources),key:'connection/'+nextConnectionId++};
             }
             el('free-connect').disabled=!pendingConnection;
+            extensionTarget=null;
+            if(selected.length===2) {
+                const [a,b]=selected.map(id=>points.get(id));
+                extensionTarget=connections.find(c=>{
+                    const curve=sources.get(c.key);
+                    return curve && freeParameter(curve,a,1e-6)!==null && freeParameter(curve,b,1e-6)!==null;
+                });
+            } else if(!selected.length && connections.includes(lastConnection)) extensionTarget=lastConnection;
+            el('free-extend').disabled=!extensionTarget || Boolean(extensionTarget.extended);
+
             choice=choice<choices.length?choice:0;
             const byCurve=new Map();
             for(const piece of pieces) {
@@ -412,7 +442,7 @@ function createFreeEditor(state,update,repaint) {
                 dot.onkeydown=e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();select();}};
                 board.append(dot);
             }
-            el('free-help').textContent=!selected.length?'Select a blue circle center or a green endpoint or intersection. Enable Show axes to edit axis segments.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
+            el('free-help').textContent=!selected.length?'Select a blue center or a green intersection. After connecting two points, use Extend line to extend both ends.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
             if(unavailable) el('free-help').textContent+=' '+unavailable+' connection(s) unavailable because a referenced point no longer exists.';
             el('free-next').hidden=choices.length<2;
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
@@ -429,6 +459,11 @@ function createFreeEditor(state,update,repaint) {
         history.push({connection:pendingConnection});
         reset();
         repaint();
+    };
+    el('free-extend').onclick=()=>{
+        if(!api.active || !extensionTarget || extensionTarget.extended) return;
+        history.push({extension:extensionTarget});extensionTarget.extended=true;
+        reset();repaint();
     };
     el('free-next').onclick=()=>{choice=(choice+1)%choices.length;repaint();};
     el('free-add-similar').onclick=()=>{
@@ -472,7 +507,8 @@ function createFreeEditor(state,update,repaint) {
     el('free-undo').onclick=()=>{
         const edit=history.pop();
         if(!edit) return;
-        if(edit.connectionRule) connectionRules.splice(connectionRules.indexOf(edit.connectionRule),1);
+        if(edit.extension) edit.extension.extended=false;
+        else if(edit.connectionRule) connectionRules.splice(connectionRules.indexOf(edit.connectionRule),1);
         else if(edit.connection) connections.splice(connections.indexOf(edit.connection),1);
         else if(edit.styleRule) styleRules.splice(styleRules.indexOf(edit.styleRule),1);
         reset();
