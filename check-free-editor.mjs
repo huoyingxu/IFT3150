@@ -295,6 +295,14 @@ console.log('Passed gap circle hide rules at nRosy 3/4/5/3.');
  click('free-extend');
  const extended=drawn.find(c=>c.key?.startsWith('connection/'));
  assert.ok(extended.a.x<a.x && extended.b.x>b.x);
+ click('create-editor');
+ const outside=drawn.find(c=>c.key?.startsWith('connection/'));
+ assert.ok(Math.abs(outside.element.attrs.x1-a.x)<1e-7);
+ assert.ok(Math.abs(outside.element.attrs.x2-b.x)<1e-7);
+ assert.ok(outside.a.x<a.x); // Retain full construction geometry for references.
+ click('create-editor');
+ const inside=drawn.find(c=>c.key?.startsWith('connection/'));
+ assert.ok(inside.element.attrs.x1<a.x);
  const outer=state.evaluation.results.get(root.id)[0];
  const contacts=context.freeContacts(extended,{...outer,start:0,end:2*Math.PI},1e-7);
  assert.equal(contacts.length,2);

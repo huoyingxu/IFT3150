@@ -345,9 +345,10 @@ function createFreeEditor(state,update,repaint) {
                 const b=resolveFreePoint(connection.bRef,sources);
                 if(!a || !b || freeDistance(a,b)<1e-9) { unavailable++; return; }
                 const drawn=connection.extended?extendFreeLine(a,b,extensionBounds):{a,b};
-                const element=svg('line',{x1:drawn.a.x,y1:-drawn.a.y,x2:drawn.b.x,y2:-drawn.b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
+                const visible=connection.extended&&!api.active?{a,b}:drawn;
+                const element=svg('line',{x1:visible.a.x,y1:-visible.a.y,x2:visible.b.x,y2:-visible.b.y,stroke:'#93e7cd','stroke-width':2,'vector-effect':'non-scaling-stroke','pointer-events':'none'});
                 board.append(element);
-                const curve={...drawn,element,key:connection.key};
+                const curve={...drawn,element,key:connection.key,displaySegment:connection.extended&&!api.active?{a,b}:null};
                 curves.push(curve);
                 sources.set(connection.key,curve);
             }
@@ -410,7 +411,17 @@ function createFreeEditor(state,update,repaint) {
                 for(const part of parts) {
                     const style=styles.get(part.id);
                     if (style==='hidden') continue;
-                    const path=svg('path',{d:part.path,fill:'none','pointer-events':'none'});
+                    let displayPath=part.path;
+                    if(curve.displaySegment) {
+                        const limits=[curve.displaySegment.a,curve.displaySegment.b].map(p=>freeParameter(curve,p,1e-6));
+                        const ends=[part.a,part.b].map(p=>freeParameter(curve,p,1e-6));
+                        const lo=Math.max(Math.min(...limits),Math.min(...ends));
+                        const hi=Math.min(Math.max(...limits),Math.max(...ends));
+                        if(hi-lo<1e-9)continue;
+                        const a=freePoint(curve,lo),b=freePoint(curve,hi);
+                        displayPath=`M ${a.x} ${-a.y} L ${b.x} ${-b.y}`;
+                    }
+                    const path=svg('path',{d:displayPath,fill:'none','pointer-events':'none'});
                     for(const attr of ['stroke','stroke-width','stroke-dasharray','vector-effect','opacity']) {
                         const value=curve.element.getAttribute(attr);
                         if(value!==null) path.setAttribute(attr,value);
