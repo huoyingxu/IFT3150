@@ -57,10 +57,18 @@ function createArcPicker(state,onChange,editor) {
             if(!node){api.close();return;}
             panel.hidden=false;panel.replaceChildren();
             const message=document.createElement('span');
-            const slot=pending.wizard?['Center','Start (also sets radius)','End'][pending.step]:pending.slot;
+            const constraint=pending.wizard==='constraint';
+            const slot=constraint?['1/4: circle containing the new center','2/4: circle to be tangent to','3/4: point to pass through','4/4: dashed candidate circle'][pending.step]:pending.wizard?['Center','Start (also sets radius)','End'][pending.step]:pending.slot;
             message.textContent='Pick '+slot+' on canvas · Blue: centers · Green: intersections / axis points. ';
             const cancel=document.createElement('button');cancel.textContent='Cancel picking';cancel.onclick=()=>{api.close();onChange();};
             panel.append(message,cancel);
+            if(constraint){
+                const mode=document.createElement('select');mode.setAttribute('aria-label','Canvas tangency');
+                mode.add(new Option('External tangency','external'));mode.add(new Option('Internal tangency','internal'));mode.value=node.arcConfig.mode;
+                mode.onchange=()=>{node.arcConfig.mode=mode.value;node.arcConfig.solution=null;onChange();editor.render();};panel.append(mode);
+                if(pending.step>0){const back=document.createElement('button');back.textContent='Back';back.onclick=()=>{pending.step--;onChange();};panel.append(back);}
+                if(pending.step===3){const status=document.createElement('span');status.textContent=state.evaluation.candidates.get(node.id)?.length?' Click a dashed outline to confirm.':state.evaluation.errors.get(node.id)||'No candidate.';panel.append(status);}
+            }
             const {circles,points}=arcPickCandidates(state,node.id);
             const ns='http://www.w3.org/2000/svg',overlay=document.createElementNS(ns,'g');overlay.setAttribute('class','arc-pick-overlay');
             const vb=(board.getAttribute('viewBox')||'-200 -200 400 400').split(/[ ,]+/).map(Number);
@@ -74,7 +82,13 @@ function createArcPicker(state,onChange,editor) {
                 el.addEventListener('click',activate);el.addEventListener('keydown',activate);overlay.append(el);
             }
             function choose(value){
-                if(pending.wizard){
+                if(constraint){
+                    const c=node.arcConfig;
+                    if(pending.step===0)c.carrier=value;
+                    if(pending.step===1)c.target=value;
+                    if(pending.step===2)c.point=value;
+                    c.solution=null;pending.step++;
+                }else if(pending.wizard){
                     const c=node.arcConfig;
                     if(pending.step===0){c.support='defined';c.center=value;c.radiusMode='point';c.bounds='points';c.sweep='short';}
                     if(pending.step===1){c.radiusPoint=structuredClone(value);c.startPoint=value;}
@@ -83,7 +97,11 @@ function createArcPicker(state,onChange,editor) {
                 } else {pending.setter(value);api.close();}
                 onChange();editor.render();
             }
-            if(pending.slot==='circle'&&!pending.wizard){
+            if(constraint&&pending.step===3){
+                (state.evaluation.candidates.get(node.id)||[]).forEach((candidate,i)=>{
+                    add('circle',{cx:candidate.center.x,cy:-candidate.center.y,r:candidate.radius,fill:'none',stroke:i%2?'#80c9ff':'#ffce73','stroke-width':3,'stroke-dasharray':'7 5','vector-effect':'non-scaling-stroke','pointer-events':'stroke',cursor:'pointer'},'candidate '+(i+1),()=>{node.arcConfig.solution=candidate.angle;api.close(true);onChange();editor.render();});
+                });
+            }else if((constraint&&pending.step<2)||(pending.slot==='circle'&&!pending.wizard)){
                 for(const {circle,ref,label} of circles)add('circle',{cx:circle.center.x,cy:-circle.center.y,r:circle.radius,fill:'none',stroke:'transparent','stroke-width':14,'vector-effect':'non-scaling-stroke','pointer-events':'stroke'},label,()=>choose(ref));
             }else{
                 // Centers are appended last so coincident axis points cannot obscure them.

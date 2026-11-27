@@ -77,4 +77,4 @@ preview.render();
 editor.fit(false);
 editor.arrange(false);
 
-document.getElementById('add-constraint-circle').onclick=()=>addNode('constraintCircle');
+document.getElementById('add-constraint-circle').onclick=()=>{addNode('constraintCircle');state.arcPicker.open(state.nodes.at(-1).id,'constraint',null,'constraint');};

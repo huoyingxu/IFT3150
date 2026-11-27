@@ -70,6 +70,7 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
         box.append(sub);
     }
     if(node.kind==='constraintCircle') {
+        pick(root,'Select inputs on canvas','constraint',null,'constraint');
         circle(root,'Center on circle',()=>config.carrier,value=>{config.carrier=value;config.solution=null;});
         circle(root,'Tangent to circle',()=>config.target,value=>{config.target=value;config.solution=null;});
         point(root,'Through point',config.point);
