@@ -46,7 +46,7 @@ function createArcPicker(state,onChange,editor) {
             state.freeEditor?.close();state.arcEditing=false;state.tangentToolId=null;
             const toggle=document.getElementById('render-image');
             if(toggle?.checked){toggle.checked=false;toggle.dispatchEvent(new Event('change'));}
-            pending={nodeId,slot,setter,wizard,step:0,original:structuredClone(state.nodes.find(n=>n.id===nodeId).arcConfig)};state.arcPicking=true;onChange();
+            pending={nodeId,slot,setter,wizard,step:0,original:structuredClone(state.nodes.find(n=>n.id===nodeId).arcConfig)};if(wizard==='constraint'&&pending.original.constraints)pending.tasks=pending.original.constraints.flatMap((q,index)=>q.type==='radius'?[]:q.type==='centerLine'?[{index,field:'a',type:'point'},{index,field:'b',type:'point'}]:[{index,field:q.type==='point'?'point':'circle',type:q.type}]);if(pending.tasks)pending.step=-1;state.arcPicking=true;onChange();
         },
         close(commit=false){
             if(pending?.wizard&&!commit){const node=state.nodes.find(n=>n.id===pending.nodeId);if(node)node.arcConfig=pending.original;}
@@ -56,18 +56,36 @@ function createArcPicker(state,onChange,editor) {
             const node=state.nodes.find(n=>n.id===pending?.nodeId);
             if(!node){api.close();return;}
             panel.hidden=false;panel.replaceChildren();
+            if(pending.tasks&&pending.step===-1){
+                const heading=document.createElement('strong');heading.textContent='Choose three circle constraints';panel.append(heading);
+                const preset=document.createElement('select');preset.setAttribute('aria-label','Constraint preset');
+                for(const [value,label]of [['custom','Custom combination'],['ttt','Three tangencies'],['ctp','Center on circle + Tangent + Point'],['ppp','Three points']])preset.add(new Option(label,value));
+                preset.onchange=()=>{const types={ttt:['tangent','tangent','tangent'],ctp:['centerCircle','tangent','point'],ppp:['point','point','point']}[preset.value];if(types){node.arcConfig.constraints=types.map(type=>({type,mode:'external',value:60}));node.arcConfig.solution=null;onChange();editor.render();}};panel.append(preset);
+                node.arcConfig.constraints.forEach((q,i)=>{
+                    const row=document.createElement('label');row.textContent=' '+(i+1)+'. ';
+                    const select=document.createElement('select');select.setAttribute('aria-label','Canvas constraint '+(i+1));
+                    for(const [value,label]of [['tangent','Tangent to circle'],['point','Through point'],['centerCircle','Center on circle'],['centerLine','Center on line (two points)'],['radius','Fixed radius']])select.add(new Option(label,value));select.value=q.type;
+                    select.onchange=()=>{node.arcConfig.constraints[i]={type:select.value,mode:'external',value:60};node.arcConfig.solution=null;onChange();editor.render();};row.append(select);
+                    if(q.type==='tangent'){const mode=document.createElement('select');mode.setAttribute('aria-label','Canvas tangency '+(i+1));mode.add(new Option('External','external'));mode.add(new Option('Internal','internal'));mode.value=q.mode||'external';mode.onchange=()=>{q.mode=mode.value;node.arcConfig.solution=null;onChange();editor.render();};row.append(mode);}
+                    if(q.type==='radius'){const input=document.createElement('input');input.type='number';input.min='0';input.step='any';input.value=q.value;input.setAttribute('aria-label','Canvas radius '+(i+1));input.onchange=()=>{q.value=input.valueAsNumber;node.arcConfig.solution=null;onChange();editor.render();};row.append(input);}
+                    panel.append(row);
+                });
+                const start=document.createElement('button');start.textContent='Next: pick on canvas';start.onclick=()=>{pending.tasks=node.arcConfig.constraints.flatMap((q,index)=>q.type==='radius'?[]:q.type==='centerLine'?[{index,field:'a',type:'point'},{index,field:'b',type:'point'}]:[{index,field:q.type==='point'?'point':'circle',type:q.type}]);pending.step=0;onChange();};panel.append(start);
+                const cancel=document.createElement('button');cancel.textContent='Cancel picking';cancel.onclick=()=>{api.close();onChange();editor.render();};panel.append(cancel);return;
+            }
             const message=document.createElement('span');
             const constraint=pending.wizard==='constraint';
-            const slot=constraint?['1/4: circle containing the new center','2/4: circle to be tangent to','3/4: point to pass through','4/4: dashed candidate circle'][pending.step]:pending.wizard?['Center','Start (also sets radius)','End'][pending.step]:pending.slot;
+            const tasks=pending.tasks,done=tasks?tasks.length:3,task=tasks?.[pending.step];
+            const slot=tasks?(task?'constraint '+(task.index+1)+' · '+task.type+(task.field==='a'?' · first line point':task.field==='b'?' · second line point':''):'dashed candidate circle'):constraint?['1/4: circle containing the new center','2/4: circle to be tangent to','3/4: point to pass through','4/4: dashed candidate circle'][pending.step]:pending.wizard?['Center','Start (also sets radius)','End'][pending.step]:pending.slot;
             message.textContent='Pick '+slot+' on canvas · Blue: centers · Green: intersections / axis points. ';
             const cancel=document.createElement('button');cancel.textContent='Cancel picking';cancel.onclick=()=>{api.close();onChange();};
             panel.append(message,cancel);
             if(constraint){
-                const mode=document.createElement('select');mode.setAttribute('aria-label','Canvas tangency');
+                if(!tasks){const mode=document.createElement('select');mode.setAttribute('aria-label','Canvas tangency');
                 mode.add(new Option('External tangency','external'));mode.add(new Option('Internal tangency','internal'));mode.value=node.arcConfig.mode;
-                mode.onchange=()=>{node.arcConfig.mode=mode.value;node.arcConfig.solution=null;onChange();editor.render();};panel.append(mode);
-                if(pending.step>0){const back=document.createElement('button');back.textContent='Back';back.onclick=()=>{pending.step--;onChange();};panel.append(back);}
-                if(pending.step===3){const status=document.createElement('span');status.textContent=state.evaluation.candidates.get(node.id)?.length?' Click a dashed outline to confirm.':state.evaluation.errors.get(node.id)||'No candidate.';panel.append(status);}
+                mode.onchange=()=>{node.arcConfig.mode=mode.value;node.arcConfig.solution=null;onChange();editor.render();};panel.append(mode);}
+                if(pending.step>0||tasks){const back=document.createElement('button');back.textContent='Back';back.onclick=()=>{pending.step--;onChange();};panel.append(back);}
+                if(pending.step===done){const status=document.createElement('span');status.textContent=state.evaluation.candidates.get(node.id)?.length?' Click a dashed outline to confirm.':state.evaluation.errors.get(node.id)||'No candidate.';panel.append(status);}
             }
             const {circles,points}=arcPickCandidates(state,node.id);
             const ns='http://www.w3.org/2000/svg',overlay=document.createElementNS(ns,'g');overlay.setAttribute('class','arc-pick-overlay');
@@ -92,24 +110,25 @@ function createArcPicker(state,onChange,editor) {
             function choose(value){
                 if(constraint){
                     const c=node.arcConfig;
-                    if(pending.step===0)c.carrier=value;
-                    if(pending.step===1)c.target=value;
-                    if(pending.step===2)c.point=value;
+                    if(tasks)c.constraints[task.index][task.field]=value;
+                    else if(pending.step===0)c.carrier=value;
+                    if(!tasks&&pending.step===1)c.target=value;
+                    if(!tasks&&pending.step===2)c.point=value;
                     c.solution=null;pending.step++;
                 }else if(pending.wizard){
                     const c=node.arcConfig;
                     if(pending.step===0){c.support='defined';c.center=value;c.radiusMode='point';c.bounds='points';c.sweep='short';}
                     if(pending.step===1){c.radiusPoint=structuredClone(value);c.startPoint=value;}
                     if(pending.step===2)c.endPoint=value;
-                    if(++pending.step===3)api.close(true);
+                    if(++pending.step===done)api.close(true);
                 } else {pending.setter(value);api.close();}
                 onChange();editor.render();
             }
-            if(constraint&&pending.step===3){
+            if(constraint&&pending.step===done){
                 (state.evaluation.candidates.get(node.id)||[]).forEach((candidate,i)=>{
                     add('circle',{cx:candidate.center.x,cy:-candidate.center.y,r:candidate.radius,fill:'none',stroke:i%2?'#80c9ff':'#ffce73','stroke-width':3,'stroke-dasharray':'7 5','vector-effect':'non-scaling-stroke','pointer-events':'stroke',cursor:'pointer'},'candidate '+(i+1),()=>{node.arcConfig.solution=candidate.angle;api.close(true);onChange();editor.render();});
                 });
-            }else if((constraint&&pending.step<2)||(pending.slot==='circle'&&!pending.wizard)){
+            }else if((constraint&&(tasks?task?.field==='circle':pending.step<2))||(pending.slot==='circle'&&!pending.wizard)){
                 for(const {circle,ref,label} of circles)add('circle',{cx:circle.center.x,cy:-circle.center.y,r:circle.radius,fill:'none',stroke:'transparent','stroke-width':14,'vector-effect':'non-scaling-stroke','pointer-events':'stroke'},label,()=>choose(ref));
             }else{
                 // Centers are appended last so coincident axis points cannot obscure them.

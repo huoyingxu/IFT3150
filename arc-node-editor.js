@@ -70,11 +70,23 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
         box.append(sub);
     }
     if(node.kind==='constraintCircle') {
+        if(config.constraints){
+            menu(root,'Preset','custom',[['custom','Custom combination'],['ttt','Three tangencies'],['ctp','Center on circle + Tangent + Point'],['ppp','Three points']],value=>{
+                const types={ttt:['tangent','tangent','tangent'],ctp:['centerCircle','tangent','point'],ppp:['point','point','point']}[value];
+                if(types){config.constraints=types.map(type=>({type,mode:'external',value:60}));config.solution=null;}
+            });
+            config.constraints.forEach((q,i)=>{
+                const box=section('Constraint '+(i+1));root.append(box);
+                menu(box,'Type '+(i+1),q.type,[['tangent','Tangent to circle'],['point','Through point'],['centerCircle','Center on circle'],['centerLine','Center on line (two points)'],['radius','Radius']],type=>{config.constraints[i]={type,mode:'external',value:60};config.solution=null;});
+                if(q.type==='radius')number(box,'Radius',q.value,value=>{q.value=value;config.solution=null;});
+                if(q.type==='tangent')menu(box,'Tangency '+(i+1),q.mode||'external',[['external','External'],['internal','Internal']],value=>{q.mode=value;config.solution=null;});
+            });
+        } else {
+            circle(root,'Center on circle',()=>config.carrier,value=>{config.carrier=value;config.solution=null;});
+            circle(root,'Tangent to circle',()=>config.target,value=>{config.target=value;config.solution=null;});
+            point(root,'Through point',config.point);
+        }
         pick(root,'Select inputs on canvas','constraint',null,'constraint');
-        circle(root,'Center on circle',()=>config.carrier,value=>{config.carrier=value;config.solution=null;});
-        circle(root,'Tangent to circle',()=>config.target,value=>{config.target=value;config.solution=null;});
-        point(root,'Through point',config.point);
-        menu(root,'Tangency',config.mode,[['external','External'],['internal','Internal']],value=>{config.mode=value;config.solution=null;});
         const choices=document.createElement('div');choices.dataset.constraintChoices='true';root.append(choices);
         return root;
     }

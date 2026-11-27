@@ -12,7 +12,7 @@ function makeNode(kind) {
             boundaries: [null, null, null], modes: ['external', 'external', 'external'],
             branch: null, obstacleIds: [], containerRef: null
         } : {}),
-        ...(kind === 'constraintCircle' ? {arcConfig:{carrier:null,target:null,point:defaultArcPoint(),mode:'external',solution:null}} : {}),
+        ...(kind === 'constraintCircle' ? {arcConfig:{constraints:[{type:'tangent',circle:null,mode:'external'},{type:'tangent',circle:null,mode:'external'},{type:'tangent',circle:null,mode:'external'}],solution:null}} : {}),
         ...(kind === 'arc' ? { arcConfig:defaultArcConfig() } : {}),
         ...(kind === 'arcGroup' ? { groupConfig:{centerMode:'circle',centerRef:null,x:0,y:0,countMode:'number',count:3} } : {}),
         visible: true,
@@ -105,11 +105,11 @@ function evaluateGraph(nodes) {
                 circles=createArcGroup(source[0],center,count);
             } else if(node.kind==='constraintCircle') {
                 const c=node.arcConfig;
-                const options=solveCenterTangentPoint(resolveArcCircle(c.carrier,evaluate),resolveArcCircle(c.target,evaluate),resolveArcPoint(c.point,evaluate),c.mode);
+                const options=c.constraints?solveCircleConstraints(c,evaluate):solveCenterTangentPoint(resolveArcCircle(c.carrier,evaluate),resolveArcCircle(c.target,evaluate),resolveArcPoint(c.point,evaluate),c.mode);
                 candidates.set(id,options);
                 if(!options.length)throw new Error('No circle satisfies these constraints.');
                 if(c.solution===null)throw new Error('Choose a candidate circle.');
-                const chosen=options.reduce((a,b)=>Math.abs(Math.atan2(Math.sin(a.angle-c.solution),Math.cos(a.angle-c.solution)))<Math.abs(Math.atan2(Math.sin(b.angle-c.solution),Math.cos(b.angle-c.solution)))?a:b);
+                const chosen=c.constraints?options[Math.min(c.solution,options.length-1)]:options.reduce((a,b)=>Math.abs(Math.atan2(Math.sin(a.angle-c.solution),Math.cos(a.angle-c.solution)))<Math.abs(Math.atan2(Math.sin(b.angle-c.solution),Math.cos(b.angle-c.solution)))?a:b);
                 const center=createPoint(chosen.center.x,chosen.center.y);
                 circles=[createNodeCircle(center,chosen.radius,createNodeAxis(center,p.nRosy,p.rotation))];
             } else if (node.kind === 'arc') {

@@ -2,7 +2,7 @@
 function createNodeEditor(state, onChange) {
     const layer=document.getElementById('node-cards'),message=document.getElementById('editor-message');
     const layout=document.getElementById('card-layout'),links=document.getElementById('card-links'),viewport=document.getElementById('node-viewport');
-    const names={constraintCircle:'Center on circle + Tangent + Point',tangent:'Self tangent',gapTangent:'Gap circles',threeTangent:'create circle by 3 parameter',arc:'Create arc',arcGroup:'Generate group'};
+    const names={constraintCircle:'Create circle by constraints',tangent:'Self tangent',gapTangent:'Gap circles',threeTangent:'create circle by 3 parameter',arc:'Create arc',arcGroup:'Generate group'};
     const observer=new ResizeObserver(updateLayout);
     let drag=null,zoom=1,arrangeRevision=0,routed=null,elk=null;
     const arrangeButton=document.getElementById('arrange-nodes');
