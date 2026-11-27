@@ -339,3 +339,20 @@ vm.runInContext(fs.readFileSync('constructed-arc.js','utf8'),context);
  assert.equal(targets.length,2);assert.ok(targets.every(p=>p.middle.y>0));
  console.log('Passed upper/lower arc alternatives across intermediate intersections and styling only the chosen side.');
 }
+{
+ let keeper,drawings;
+ const render=()=>{
+  board.children=[];
+  drawings=[{...circle,key:'keep-circle',element:element({stroke:'pink'})},{...horizontal,key:'guide',element:element({stroke:'green'})},{...vertical,key:'vertical',element:element({stroke:'green'})}];
+  keeper.render(drawings,board,(_,attrs)=>element(attrs),[]);
+ };
+ keeper=context.createFreeEditor({},render,render);click('create-editor');point(-1,0);point(0,1);
+ assert.equal(document.getElementById('free-keep-only').disabled,false);click('free-keep-only');
+ assert.equal(drawings[0].element.children.length,1);
+ assert.equal(drawings[1].element.removed,undefined);assert.equal(drawings[2].element.removed,undefined);
+ click('create-editor');assert.equal(drawings[0].element.children.length,1);
+ click('create-editor');click('free-undo');assert.equal(drawings[0].element.removed,undefined);
+ point(-1,0);point(0,1);click('free-next');click('free-keep-only');
+ assert.equal(drawings[0].element.children.length,3);
+ console.log('Passed keep-only short/long arc, other geometry unchanged, exit retention and single-step undo.');
+}

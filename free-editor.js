@@ -295,6 +295,15 @@ function resolveFreeStyle(reference,pieces,sources) {
     });
 }
 
+function freeCirclePieces(reference,pieces) {
+    return pieces.filter(piece=>{
+        if(piece.curve.a)return false;
+        const match=piece.curve.key?.match(/^([^@]+)@\d+:(\d+)/);
+        const key=match?match[1]+':'+match[2]:piece.curve.key;
+        return key===reference.key;
+    });
+}
+
 function relatedFreePieces(reference,pieces,state,scope) {
     if(scope!=='global') {
         const grouped=findGroupedFreeSegments(reference,pieces,state,scope);
@@ -400,6 +409,12 @@ function createFreeEditor(state,update,repaint) {
             styles.clear();
             for(const rule of styleRules) {
                 const seed=resolveFreeStyle(rule.reference,pieces,sources);
+                if(rule.keepOnly){
+                    // If references disappear, do not hide an unrelated or entire circle.
+                    if(seed.length){const keep=new Set(seed.map(p=>p.id));
+                        for(const piece of freeCirclePieces(rule.reference,pieces))styles.set(piece.id,keep.has(piece.id)?'solid':'hidden');}
+                    continue;
+                }
                 const targets=rule.scope ? seed.flatMap(piece=>relatedFreePieces(piece,pieces,state,rule.scope)) : seed;
                 for(const piece of targets) styles.set(piece.id,rule.style);
             }
@@ -496,6 +511,7 @@ function createFreeEditor(state,update,repaint) {
             el('free-next').hidden=choices.length<2;
             el('free-next').textContent='Switch path ('+(choice+1)+' / '+choices.length+')';
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
+            el('free-keep-only').disabled=!chosen || Boolean(chosen.curve.a);
             el('free-clear').disabled=!selected.length;
             el('free-undo').disabled=!history.length;
         }
@@ -535,6 +551,14 @@ function createFreeEditor(state,update,repaint) {
         history.push({styleRule:rule});
         reset();
         repaint();
+    };
+    el('free-keep-only').onclick=()=>{
+        const piece=livePieces.find(p=>p.id===choices[choice]);
+        if(!api.active || !piece || piece.curve.a)return;
+        const reference=freeStyleReference(piece,liveSources);
+        if(!reference.key)return;
+        const rule={reference,keepOnly:true};styleRules.push(rule);history.push({styleRule:rule});
+        reset();repaint();
     };
     for(const [button,style] of [['free-dash','dashed'],['free-hide','hidden'],['free-solid','solid']]) {
         el(button).onclick=()=>{
