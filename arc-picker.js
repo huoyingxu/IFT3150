@@ -79,7 +79,15 @@ function createArcPicker(state,onChange,editor) {
                 el.setAttribute('role','button');el.setAttribute('tabindex','0');el.setAttribute('aria-label','Pick '+label);
                 const title=document.createElementNS(ns,'title');title.textContent=label;el.append(title);
                 const activate=e=>{if(e.type==='keydown'&&!['Enter',' '].includes(e.key))return;e.preventDefault();e.stopPropagation();choose();};
-                el.addEventListener('click',activate);el.addEventListener('keydown',activate);overlay.append(el);
+                el.addEventListener('click',activate);el.addEventListener('keydown',activate);
+                if(tag==='circle' && attrs.fill==='none') {
+                    const group=document.createElementNS(ns,'g');group.setAttribute('class','canvas-circle-choice');
+                    const highlight=document.createElementNS(ns,'circle');
+                    for(const key of ['cx','cy','r'])highlight.setAttribute(key,attrs[key]);
+                    highlight.setAttribute('class','canvas-circle-highlight');
+                    highlight.setAttribute('pointer-events','none');highlight.setAttribute('aria-hidden','true');
+                    el.style.cursor='pointer';group.append(el,highlight);overlay.append(group);
+                }else overlay.append(el);
             }
             function choose(value){
                 if(constraint){

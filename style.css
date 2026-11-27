@@ -216,3 +216,7 @@ input[type="checkbox"] { accent-color: #a9d998; }
 .arc-pick-panel[hidden] { display: none; }
 .arc-pick-panel button { margin-left: 12px; }
 .arc-construction-fields button { margin: 6px 0; }
+
+.canvas-circle-highlight { fill:none; stroke:#ffe08a; stroke-width:4; vector-effect:non-scaling-stroke; visibility:hidden; pointer-events:none; }
+.canvas-circle-choice:hover .canvas-circle-highlight,
+.canvas-circle-choice:focus-within .canvas-circle-highlight { visibility:visible; }
