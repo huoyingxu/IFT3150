@@ -325,3 +325,17 @@ vm.runInContext(fs.readFileSync('constructed-arc.js','utf8'),context);
  assert.equal(context.extendFreeLine(a,a,[]),null);
  console.log('Passed line extension, selectable outer intersections, undo, nRosy updates, vertical and degenerate lines.');
 }
+{
+ const c={...circle,key:'node-99@1:0'};
+ const segs=context.buildFreeSegments([c,horizontal,vertical]);
+ const a={x:-1,y:0},b={x:1,y:0};
+ const alternatives=context.freeArcAlternatives(a,b,['a','b'],segs.pieces,new Map([['node-99:0',c]]));
+ assert.equal(alternatives.length,2);
+ assert.ok(alternatives.some(p=>p.middle.y>0));assert.ok(alternatives.some(p=>p.middle.y<0));
+ const registry=new Map([['node-99:0',c]]);
+ const upper=alternatives.find(p=>p.middle.y>0);
+ const reference=context.freeStyleReference(upper,registry);
+ const targets=context.resolveFreeStyle(reference,segs.pieces,registry);
+ assert.equal(targets.length,2);assert.ok(targets.every(p=>p.middle.y>0));
+ console.log('Passed upper/lower arc alternatives across intermediate intersections and styling only the chosen side.');
+}

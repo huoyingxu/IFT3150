@@ -308,6 +308,37 @@ function relatedFreePieces(reference,pieces,state,scope) {
     return outer ? findSimilarFreeSegments(reference,pieces,outer.center) : [];
 }
 
+// Two selected points can delimit a whole arc across several intersection cuts.
+function freeArcAlternatives(a,b,ends,pieces,sources) {
+    const results=[];
+    for(const [key,circle] of sources){
+        if(circle.a || !circle.center || Math.abs(Math.abs(circle.end-circle.start)-Math.PI*2)>1e-7)continue;
+        const eps=Math.max(1,circle.radius)*1e-7;
+        if(Math.abs(freeDistance(a,circle.center)-circle.radius)>eps || Math.abs(freeDistance(b,circle.center)-circle.radius)>eps)continue;
+        const parts=pieces.filter(p=>{
+            if(p.curve.a)return false;
+            const m=p.curve.key?.match(/^([^@]+)@\d+:(\d+)/);
+            return (m?m[1]+':'+m[2]:p.curve.key)===key;
+        });
+        if(!parts.length)continue;
+        const start=Math.atan2(a.y-circle.center.y,a.x-circle.center.x),end=Math.atan2(b.y-circle.center.y,b.x-circle.center.x);
+        const ccw=arcAngle(end-start);
+        for(const sweep of [ccw,ccw-Math.PI*2]){
+            if(Math.abs(sweep)<1e-9)continue;
+            const arc={...circle,start,end:start+sweep};
+            const travel=p=>arcAngle((Math.atan2(p.y-circle.center.y,p.x-circle.center.x)-start)*Math.sign(sweep));
+            const included=parts.filter(p=>travel(p.middle)<Math.abs(sweep)+1e-8);
+            const length=included.reduce((sum,p)=>sum+arcAngle((Math.atan2(p.b.y-circle.center.y,p.b.x-circle.center.x)-Math.atan2(p.a.y-circle.center.y,p.a.x-circle.center.x))*Math.sign(p.curve.end-p.curve.start)),0);
+            if(Math.abs(length-Math.abs(sweep))>1e-6)continue;
+            const middle=freePoint(arc,.5);
+            // Keep existing single-piece choices; add only alternatives spanning multiple pieces.
+            if(included.length<=1)continue;
+            results.push({id:'arc-selection/'+key+'/'+start+'/'+sweep,ends,a,b,middle,curve:{...circle,key},path:circleArcPath(arc,arc)});
+        }
+    }
+    return results;
+}
+
 function createFreeEditor(state,update,repaint) {
     const el=id=>document.getElementById(id);
     const styles=new Map(),history=[];
@@ -386,7 +417,9 @@ function createFreeEditor(state,update,repaint) {
             el('free-preview').disabled=!matches.length && !pendingSimilar.length;
             el('free-similar').textContent=matches.length ? 'Hide similar segments ('+matches.length+')' : 'Hide similar segments';
             if (selected.some(id=>!points.has(id))) reset();
-            choices=[...new Set(pieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
+            const alternatives=selected.length===2?freeArcAlternatives(...selected.map(id=>points.get(id)),selected,pieces,sources):[];
+            livePieces=pieces.concat(alternatives);
+            choices=[...new Set(livePieces.filter(p=>selected.length===2 && selected.every(id=>p.ends.includes(id))).map(p=>p.id))];
             pendingConnection=null;
             if (selected.length===2) {
                 const [a,b]=selected.map(id=>points.get(id));
@@ -447,7 +480,7 @@ function createFreeEditor(state,update,repaint) {
                     board.append(svg('path',{d:piece.path,fill:'none',stroke:'#ffd178','stroke-width':4,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
                 }
             }
-            const chosen=pieces.find(p=>p.id===choices[choice]);
+            const chosen=livePieces.find(p=>p.id===choices[choice]);
             if(chosen) board.append(svg('path',{d:chosen.path,fill:'none',stroke:'#ffce78','stroke-width':5,'vector-effect':'non-scaling-stroke','pointer-events':'none'}));
             const scale=board.getScreenCTM()?.a || 1;
             for(const [id,p] of points) {
@@ -458,9 +491,10 @@ function createFreeEditor(state,update,repaint) {
                 dot.onkeydown=e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();select();}};
                 board.append(dot);
             }
-            el('free-help').textContent=!selected.length?'Select a blue center or a green intersection. After connecting two points, use Extend line to extend both ends.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Next segment to choose the highlighted path.`:'Selected segment highlighted. Choose a style.';
+            el('free-help').textContent=!selected.length?'Select a blue center or a green intersection. After connecting two points, use Extend line to extend both ends.':selected.length===1?'Select a second point.':!chosen?(pendingConnection?'Click Connect points to draw a straight segment.':'Select neighboring points to style part of this line.'):choices.length>1?`Segment ${choice+1} of ${choices.length}. Use Switch path to select another arc between these points.`:'Selected segment highlighted. Choose a style.';
             if(unavailable) el('free-help').textContent+=' '+unavailable+' connection(s) unavailable because a referenced point no longer exists.';
             el('free-next').hidden=choices.length<2;
+            el('free-next').textContent='Switch path ('+(choice+1)+' / '+choices.length+')';
             for(const id of ['free-dash','free-hide','free-solid']) el(id).disabled=!chosen;
             el('free-clear').disabled=!selected.length;
             el('free-undo').disabled=!history.length;
