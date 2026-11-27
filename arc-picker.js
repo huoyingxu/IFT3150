@@ -55,14 +55,22 @@ function createArcPicker(state,onChange,editor) {
             board.querySelectorAll('.arc-pick-overlay').forEach(e=>e.remove());
             const node=state.nodes.find(n=>n.id===pending?.nodeId);
             if(!node){api.close();return;}
-            panel.hidden=false;panel.replaceChildren();
+            panel.hidden=false;panel.replaceChildren();panel.className="arc-pick-panel";
             if(pending.tasks&&pending.step===-1){
-                const heading=document.createElement('strong');heading.textContent='Choose three circle constraints';panel.append(heading);
+                panel.className='arc-pick-panel constraint-setup';
+                const header=document.createElement('div');header.className='constraint-setup-header';
+                const heading=document.createElement('strong');heading.textContent='Circle constraints';
+                const hint=document.createElement('span');hint.textContent='Choose three conditions, then select geometry on the canvas.';
+                header.append(heading,hint);panel.append(header);
+                const presetRow=document.createElement('div');presetRow.className='constraint-preset-row';
+                const presetLabel=document.createElement('span');presetLabel.textContent='Preset';presetRow.append(presetLabel);panel.append(presetRow);
+
                 const preset=document.createElement('select');preset.setAttribute('aria-label','Constraint preset');
                 for(const [value,label]of [['custom','Custom combination'],['ttt','Three tangencies'],['ctp','Center on circle + Tangent + Point'],['ppp','Three points']])preset.add(new Option(label,value));
-                preset.onchange=()=>{const types={ttt:['tangent','tangent','tangent'],ctp:['centerCircle','tangent','point'],ppp:['point','point','point']}[preset.value];if(types){node.arcConfig.constraints=types.map(type=>({type,mode:'external',value:60}));node.arcConfig.solution=null;onChange();editor.render();}};panel.append(preset);
+                preset.onchange=()=>{const types={ttt:['tangent','tangent','tangent'],ctp:['centerCircle','tangent','point'],ppp:['point','point','point']}[preset.value];if(types){node.arcConfig.constraints=types.map(type=>({type,mode:'external',value:60}));node.arcConfig.solution=null;onChange();editor.render();}};presetRow.append(preset);
                 node.arcConfig.constraints.forEach((q,i)=>{
-                    const row=document.createElement('label');row.textContent=' '+(i+1)+'. ';
+                    const row=document.createElement('div');row.className='constraint-setup-row';
+                    const badge=document.createElement('span');badge.className='constraint-number';badge.textContent=String(i+1);row.append(badge);
                     const select=document.createElement('select');select.setAttribute('aria-label','Canvas constraint '+(i+1));
                     for(const [value,label]of [['tangent','Tangent to circle'],['point','Through point'],['centerCircle','Center on circle'],['centerLine','Center on line (two points)'],['radius','Fixed radius']])select.add(new Option(label,value));select.value=q.type;
                     select.onchange=()=>{node.arcConfig.constraints[i]={type:select.value,mode:'external',value:60};node.arcConfig.solution=null;onChange();editor.render();};row.append(select);
@@ -70,8 +78,9 @@ function createArcPicker(state,onChange,editor) {
                     if(q.type==='radius'){const input=document.createElement('input');input.type='number';input.min='0';input.step='any';input.value=q.value;input.setAttribute('aria-label','Canvas radius '+(i+1));input.onchange=()=>{q.value=input.valueAsNumber;node.arcConfig.solution=null;onChange();editor.render();};row.append(input);}
                     panel.append(row);
                 });
-                const start=document.createElement('button');start.textContent='Next: pick on canvas';start.onclick=()=>{pending.tasks=node.arcConfig.constraints.flatMap((q,index)=>q.type==='radius'?[]:q.type==='centerLine'?[{index,field:'a',type:'point'},{index,field:'b',type:'point'}]:[{index,field:q.type==='point'?'point':'circle',type:q.type}]);pending.step=0;onChange();};panel.append(start);
-                const cancel=document.createElement('button');cancel.textContent='Cancel picking';cancel.onclick=()=>{api.close();onChange();editor.render();};panel.append(cancel);return;
+                const actions=document.createElement('div');actions.className='constraint-setup-actions';panel.append(actions);
+                const start=document.createElement('button');start.className='constraint-primary';start.textContent='Next: pick on canvas';start.onclick=()=>{pending.tasks=node.arcConfig.constraints.flatMap((q,index)=>q.type==='radius'?[]:q.type==='centerLine'?[{index,field:'a',type:'point'},{index,field:'b',type:'point'}]:[{index,field:q.type==='point'?'point':'circle',type:q.type}]);pending.step=0;onChange();};actions.append(start);
+                const cancel=document.createElement('button');cancel.textContent='Cancel picking';cancel.onclick=()=>{api.close();onChange();editor.render();};actions.append(cancel);return;
             }
             const message=document.createElement('span');
             const constraint=pending.wizard==='constraint';

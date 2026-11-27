@@ -220,3 +220,24 @@ input[type="checkbox"] { accent-color: #a9d998; }
 .canvas-circle-highlight { fill:none; stroke:#ffe08a; stroke-width:4; vector-effect:non-scaling-stroke; visibility:hidden; pointer-events:none; }
 .canvas-circle-choice:hover .canvas-circle-highlight,
 .canvas-circle-choice:focus-within .canvas-circle-highlight { visibility:visible; }
+
+/* Constraint setup stays readable at the width of the result panel. */
+.constraint-setup { display:flex; flex-direction:column; gap:12px; padding:18px; color:#dce8e2; max-height:48vh; overflow:auto; }
+.constraint-setup-header { display:flex; flex-direction:column; gap:5px; }
+.constraint-setup-header strong { color:#ffcf85; font-size:16px; }
+.constraint-setup-header span { color:#a6bcb1; font-size:12px; line-height:1.5; }
+.constraint-preset-row { display:grid; grid-template-columns:72px minmax(0,1fr); align-items:center; gap:12px; padding-bottom:12px; border-bottom:1px solid #384b41; }
+.constraint-preset-row > span { font-size:12px; color:#a6bcb1; }
+.constraint-setup-row { display:grid; grid-template-columns:28px minmax(0,1fr) minmax(100px,130px); gap:10px; align-items:center; padding:10px; background:#18241e; border:1px solid #354c3e; border-radius:8px; }
+.constraint-number { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#354332; color:#ffd48c; font-size:12px; font-weight:600; }
+.constraint-setup select,.constraint-setup input { box-sizing:border-box; width:100%; min-width:0; height:36px; font-size:13px; border-radius:5px; }
+.constraint-setup-row > select:last-child:nth-child(2) { grid-column:2 / -1; }
+.constraint-setup-actions { display:flex; flex-wrap:wrap; gap:8px; padding-top:4px; }
+.constraint-setup-actions button { margin:0; padding:9px 14px; font-size:13px; border-radius:6px; }
+.constraint-setup-actions .constraint-primary { background:#efc078; border-color:#efc078; color:#202a23; font-weight:600; }
+.constraint-setup-actions .constraint-primary:hover { background:#ffdb9d; }
+@media(max-width:700px) {
+ .constraint-setup {padding:12px;}
+ .constraint-setup-row {grid-template-columns:26px minmax(0,1fr);}
+ .constraint-setup-row > :nth-child(3) {grid-column:2;}
+}
