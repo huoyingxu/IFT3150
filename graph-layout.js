@@ -7,6 +7,7 @@ function graphInputPorts(node, nodes) {
         if(p.kind==='center'||p.kind==='circlePoint')add(key,label,p.circle);
         if(p.kind==='intersection'){add(key+'-first',label+' 1',p.first);add(key+'-second',label+' 2',p.second);}
     };
+    if(node.kind==='constraintCircle'){add('carrier','Center on circle',node.arcConfig.carrier);add('target','Tangent circle',node.arcConfig.target);arcPointReferences(node.arcConfig.point).forEach((ref,i)=>add('point'+i,'Through point',ref));}
     if(node.kind==='arcGroup'){add('source','Source arc',node.sourceId?{nodeId:node.sourceId}:null);if(node.groupConfig.centerMode==='circle')add('center','Rotation center',node.groupConfig.centerRef);}
     if(node.kind==='tangent')add('source','Circle / group',node.sourceId?{nodeId:node.sourceId}:null);
     if(node.kind==='gapTangent') {

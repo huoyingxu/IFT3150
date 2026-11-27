@@ -2,7 +2,7 @@
 function createNodeEditor(state, onChange) {
     const layer=document.getElementById('node-cards'),message=document.getElementById('editor-message');
     const layout=document.getElementById('card-layout'),links=document.getElementById('card-links'),viewport=document.getElementById('node-viewport');
-    const names={tangent:'Self tangent',gapTangent:'Gap circles',threeTangent:'create circle by 3 parameter',arc:'Create arc',arcGroup:'Generate group'};
+    const names={constraintCircle:'Center on circle + Tangent + Point',tangent:'Self tangent',gapTangent:'Gap circles',threeTangent:'create circle by 3 parameter',arc:'Create arc',arcGroup:'Generate group'};
     const observer=new ResizeObserver(updateLayout);
     let drag=null,zoom=1,arrangeRevision=0,routed=null,elk=null;
     const arrangeButton=document.getElementById('arrange-nodes');
@@ -12,6 +12,7 @@ function createNodeEditor(state, onChange) {
     const el=(tag,value='',cls='')=>{const e=document.createElement(tag);e.textContent=value;e.className=cls;return e;};
     const cardFor=(id,role)=>layer.querySelector(`[data-node-id="${id}"][data-role="${role}"]`);
     const refs=node=>[...new Set([node.sourceId,node.kind==='arcGroup'&&node.groupConfig.centerMode==='circle'?node.groupConfig.centerRef?.nodeId:null,node.kind==='gapTangent'?state.nodes.find(n=>n.id===node.sourceId)?.sourceId:null,...(node.boundaries||[]).map(r=>r?.nodeId),node.containerRef?.nodeId,
+        ...(node.kind==='constraintCircle'?constraintCircleReferences(node.arcConfig).map(r=>r.nodeId):[]),
         ...(node.kind==='arc'?arcConstructionReferences(node.arcConfig).map(r=>r.nodeId):[])].filter(Boolean))];
     const format=value=>Math.abs(value)<1e-12?0:Number(value.toPrecision(6));
     function inputRow(node,key,title) {
@@ -70,7 +71,7 @@ function createNodeEditor(state, onChange) {
         const body=el('div','','node-body');body.hidden=Boolean(collapsed);
         if(fn) {
             if(node.kind==='arcGroup')body.append(renderArcGroupFields(node,state,onChange,render));
-            else if(node.kind==='arc')body.append(renderArcNodeFields(node,state,onChange,render));
+            else if(['arc','constraintCircle'].includes(node.kind))body.append(renderArcNodeFields(node,state,onChange,render));
             else if(node.kind==='threeTangent')tangentFields(node,body);
             else sourceMenu(node,body);
         } else {
@@ -223,6 +224,14 @@ function createNodeEditor(state, onChange) {
                     properties.append(el('p',(values.length>1?(node.kind==='arcGroup'?'Base arc #1 · ':'Base circle #1 · '):'')+'Center ('+format(c.center.x)+', '+format(c.center.y)+')'),el('p','Radius '+format(c.radius)));
                     if(node.kind==='arc')properties.append(el('p','Sweep '+format(c.sweep*180/Math.PI)+'°'));properties.append(el('small','Computed by the function'));
                 } else properties.append(el('p','Waiting for a valid function result.'));
+            }
+            const constraintChoices=card.querySelector('[data-constraint-choices]');
+            if(constraintChoices){
+                constraintChoices.replaceChildren();
+                (state.evaluation.candidates.get(node.id)||[]).forEach((c,i)=>{
+                    const button=el('button','Candidate '+(i+1)+' · center ('+format(c.center.x)+', '+format(c.center.y)+') · r '+format(c.radius));
+                    button.onclick=()=>{node.arcConfig.solution=c.angle;onChange();};constraintChoices.append(button);
+                });
             }
             const members=card.querySelector('[data-members]');
             if(members){members.replaceChildren();for(const [i,c] of values.entries())members.append(el('p',`#${i+1} · (${format(c.center.x)}, ${format(c.center.y)}) · r ${format(c.radius)}`));}

@@ -76,3 +76,5 @@ editor.render();
 preview.render();
 editor.fit(false);
 editor.arrange(false);
+
+document.getElementById('add-constraint-circle').onclick=()=>addNode('constraintCircle');

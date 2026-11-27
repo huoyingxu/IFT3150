@@ -6,7 +6,7 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
         const button=document.createElement('button');button.type='button';button.textContent=title;
         button.onclick=()=>state.arcPicker.open(node.id,slot,setter,wizard);box.append(button);
     }
-    pick(root,'Pick center / start / end','wizard',null,true);
+    if(node.kind==='arc')pick(root,'Pick center / start / end','wizard',null,true);
     function section(title) {
         const box=document.createElement('fieldset'), legend=document.createElement('legend');
         box.className='arc-fieldset'; legend.textContent=title; box.append(legend); return box;
@@ -68,6 +68,14 @@ function renderArcNodeFields(node, state, onChange, rebuild) {
         }
         pick(sub,'Pick '+title.toLowerCase()+' on canvas',title,value=>{Object.assign(p,value);});
         box.append(sub);
+    }
+    if(node.kind==='constraintCircle') {
+        circle(root,'Center on circle',()=>config.carrier,value=>{config.carrier=value;config.solution=null;});
+        circle(root,'Tangent to circle',()=>config.target,value=>{config.target=value;config.solution=null;});
+        point(root,'Through point',config.point);
+        menu(root,'Tangency',config.mode,[['external','External'],['internal','Internal']],value=>{config.mode=value;config.solution=null;});
+        const choices=document.createElement('div');choices.dataset.constraintChoices='true';root.append(choices);
+        return root;
     }
     const support=section('1. Support circle');root.append(support);
     menu(support,'Support mode',config.support,[['circle','Use an existing circle'],['defined','Define center and radius']],value=>config.support=value);

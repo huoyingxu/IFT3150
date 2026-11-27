@@ -6,12 +6,13 @@ function makeNode(kind) {
     return {
         id: id,
         kind: kind,
-        name: (kind === 'circle' || kind === 'threeTangent' ? 'Circle ' : kind === 'arc' ? 'Arc ' : kind === 'arcGroup' ? 'Arc group ' : 'Circle group ') + id.split('-')[1],
+        name: (kind === 'circle' || kind === 'threeTangent' || kind === 'constraintCircle' ? 'Circle ' : kind === 'arc' ? 'Arc ' : kind === 'arcGroup' ? 'Arc group ' : 'Circle group ') + id.split('-')[1],
         sourceId: null,
         ...(kind === 'threeTangent' ? {
             boundaries: [null, null, null], modes: ['external', 'external', 'external'],
             branch: null, obstacleIds: [], containerRef: null
         } : {}),
+        ...(kind === 'constraintCircle' ? {arcConfig:{carrier:null,target:null,point:defaultArcPoint(),mode:'external',solution:null}} : {}),
         ...(kind === 'arc' ? { arcConfig:defaultArcConfig() } : {}),
         ...(kind === 'arcGroup' ? { groupConfig:{centerMode:'circle',centerRef:null,x:0,y:0,countMode:'number',count:3} } : {}),
         visible: true,
@@ -25,7 +26,7 @@ function makeNode(kind) {
 
 // All geometric constraints participate in cycle checks, including obstacles.
 function getNodeDependencies(node) {
-    return [...new Set([node.sourceId, ...(node.boundaries || []).map(r=>r?.nodeId),
+    return [...new Set([...(node.kind==='constraintCircle'?constraintCircleReferences(node.arcConfig).map(r=>r.nodeId):[]),node.sourceId, ...(node.boundaries || []).map(r=>r?.nodeId),
         node.containerRef?.nodeId, node.kind==='arcGroup'&&node.groupConfig.centerMode==='circle'?node.groupConfig.centerRef?.nodeId:null, ...(node.obstacleIds || []), ...(node.kind === 'arc' ? arcConstructionReferences(node.arcConfig).map(r=>r.nodeId) : [])].filter(Boolean))];
 }
 function getSourceChain(nodes, id) {
@@ -102,6 +103,15 @@ function evaluateGraph(nodes) {
                     center=circle.center;if(g.countMode==='axis')count=circle.axis.nRosy;
                 }
                 circles=createArcGroup(source[0],center,count);
+            } else if(node.kind==='constraintCircle') {
+                const c=node.arcConfig;
+                const options=solveCenterTangentPoint(resolveArcCircle(c.carrier,evaluate),resolveArcCircle(c.target,evaluate),resolveArcPoint(c.point,evaluate),c.mode);
+                candidates.set(id,options);
+                if(!options.length)throw new Error('No circle satisfies these constraints.');
+                if(c.solution===null)throw new Error('Choose a candidate circle.');
+                const chosen=options.reduce((a,b)=>Math.abs(Math.atan2(Math.sin(a.angle-c.solution),Math.cos(a.angle-c.solution)))<Math.abs(Math.atan2(Math.sin(b.angle-c.solution),Math.cos(b.angle-c.solution)))?a:b);
+                const center=createPoint(chosen.center.x,chosen.center.y);
+                circles=[createNodeCircle(center,chosen.radius,createNodeAxis(center,p.nRosy,p.rotation))];
             } else if (node.kind === 'arc') {
                 circles = [createConstructedArc(node.arcConfig,evaluate)];
             } else if (node.kind === 'circle') {
